@@ -1,0 +1,40 @@
+{
+  "name": "가정 자산 관리",
+  "short_name": "가정 자산",
+  "description": "가족 자산을 한눈에 — 구성원별, 유형별 자산 관리 앱",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0e0f14",
+  "theme_color": "#0e0f14",
+  "orientation": "any",
+  "lang": "ko",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "대시보드",
+      "url": "./index.html#dashboard",
+      "description": "자산 현황 대시보드 바로가기"
+    },
+    {
+      "name": "가격 업데이트",
+      "url": "./index.html#price",
+      "description": "주식·채권 현재가 업데이트"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
