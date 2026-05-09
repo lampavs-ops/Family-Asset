@@ -1343,24 +1343,24 @@ function getRecentBizDates(n=5){
 async function fetchKrStockPrice(code,apiKey){
   const baseUrl=`https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo`;
 
-  // 응답에서 해당 종목코드와 일치하는 항목 찾기
   function findMatchingItem(json, code){
     const items=json?.response?.body?.items?.item;
+    console.log(`[API 응답] code=${code}, items=`, JSON.stringify(items)?.slice(0,300));
     if(!items)return null;
     const list=Array.isArray(items)?items:[items];
-    // 종목코드(srtnCd) 또는 ISIN 끝 6자리로 매칭
     const matched=list.find(i=>
       i.srtnCd===code ||
       i.srtnCd===code.padStart(6,'0') ||
       (i.isinCd&&i.isinCd.slice(-6)===code.slice(-6))
     );
-    // 매칭 실패 시 첫 항목 (단일 종목 조회라면 맞을 것)
+    console.log(`[매칭] code=${code} → matched srtnCd=${matched?.srtnCd}, clpr=${matched?.clpr}`);
     return matched||list[0];
   }
 
-  // 1차: 날짜 없이 최신 데이터 조회 (numOfRows 충분히)
+  // 1차: 날짜 없이 최신 데이터 조회
   try{
     const url=`${baseUrl}?serviceKey=${apiKey}&numOfRows=5&pageNo=1&resultType=json&srtnCd=${code}`;
+    console.log(`[요청] ${url}`);
     const res=await fetch(url,{signal:AbortSignal.timeout(8000)});
     if(res.ok){
       const json=await res.json();
@@ -1368,10 +1368,11 @@ async function fetchKrStockPrice(code,apiKey){
       if(row?.clpr){
         const price=Math.round(Number(String(row.clpr).replace(/,/g,'')));
         const date=row.basDt||'';
+        console.log(`[결과] code=${code}, price=${price}, date=${date}`);
         if(price>0)return{price,date};
       }
     }
-  }catch(e){console.info('govapi no-date fail:',e.message);}
+  }catch(e){console.info('govapi no-date fail:',code,e.message);}
 
   // 2차: 최근 영업일별 순차 시도
   const dates=getRecentBizDates(7);
