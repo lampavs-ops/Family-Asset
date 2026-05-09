@@ -1914,22 +1914,22 @@ function saveAsset(){
 
   if(id){const idx=data.assets.findIndex(a=>a.id===id);data.assets[idx]={...data.assets[idx],...obj};}
   else data.assets.push({id:uid(),...obj});
-  save();closeAssetModal();showToast('✅ 자산 저장 완료');
-  refreshAllAssetViews();
+  save();showToast('✅ 자산 저장 완료');
+  setTimeout(()=>location.reload(),600);
 }
 
 function deleteMemberAsset(id){
   if(!confirm('이 자산을 삭제하시겠습니까?'))return;
   data.assets=data.assets.filter(a=>a.id!==id);
   save();showToast('🗑️ 삭제 완료');
-  refreshAllAssetViews();
+  setTimeout(()=>location.reload(),600);
 }
 
 function deleteAsset(id){
   if(!confirm('이 자산을 삭제하시겠습니까?'))return;
   data.assets=data.assets.filter(a=>a.id!==id);
   save();showToast('🗑️ 삭제 완료');
-  refreshAllAssetViews();
+  setTimeout(()=>location.reload(),600);
 }
 
 // 자산 변경 시 모든 관련 뷰 즉시 갱신
