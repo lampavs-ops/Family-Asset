@@ -502,9 +502,10 @@
 
   <div class="info-box">
     📡 <strong>가격 데이터 안내</strong><br>
-    · <strong>주식</strong>: 네이버 금융 API 1차 시도 → 실패 시 Yahoo Finance API 자동 전환. 종목코드는 숫자 6자리 (예: <code>005930</code>) 또는 Yahoo 형식 (예: <code>005930.KS</code>) 모두 인식<br>
-    · <strong>채권</strong>: 한국거래소(KRX) 공개 API 사용. ISIN 코드 12자리 입력 (예: <code>KR1030012D82</code>)<br>
-    · 브라우저 보안 정책(CORS)으로 인해 Google Finance·신한증권 등 일부 사이트는 HTML 파일에서 직접 조회가 불가능합니다. 조회 실패 시 자산 편집에서 현재가를 직접 수정해 주세요.
+    · <strong>한국 주식/리츠</strong>: 공공데이터포털 금융위원회 주식시세 API 사용. 종목코드는 숫자 6자리만 입력 (예: <code>005930</code>)<br>
+    · <strong>미국 주식</strong>: Yahoo Finance API 사용. 영문 ticker 입력 (예: <code>AAPL</code>, <code>TSLA</code>)<br>
+    · <strong>채권</strong>: ISIN 코드 12자리 입력 (예: <code>KR1030012D82</code>). 조회 실패 시 직접 수정<br>
+    · 종가 기준으로 조회되며 최근 5 영업일 내 데이터를 자동으로 가져옵니다
   </div>
 
   <div class="card" style="margin-bottom:20px;">
@@ -634,6 +635,16 @@
       <div class="form-group" style="margin-bottom:18px">
         <label class="form-label">API_KEY</label>
         <input class="form-input" id="cfg-api-key" placeholder="AIzaSy...">
+      </div>
+      <div style="border-top:1px solid var(--border);margin:18px 0 14px"></div>
+      <div style="font-size:12px;color:var(--accent);font-weight:600;margin-bottom:10px">📈 주식 종가 조회 (공공데이터포털)</div>
+      <div style="font-size:11.5px;color:var(--text3);margin-bottom:12px;line-height:1.6">
+        <a href="https://www.data.go.kr" target="_blank" style="color:var(--blue)">data.go.kr</a> → 
+        <strong style="color:var(--text2)">금융위원회_주식시세정보</strong> 활용신청 → 일반 인증키 입력
+      </div>
+      <div class="form-group" style="margin-bottom:18px">
+        <label class="form-label">공공데이터 인증키 (주식 종가 조회용)</label>
+        <input class="form-input" id="cfg-stock-api-key" placeholder="발급받은 일반 인증키 붙여넣기">
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeGdriveConfig()">취소</button>
@@ -1295,91 +1306,104 @@ function renderPricePage(){
       }).join('')}</tbody></table>`;
 }
 
-// ── 주식: 네이버 금융 1차 → Yahoo Finance 2차 fallback ─────────────
-// 종목코드 정규화: '005930' → '005930.KS', '005930.KS' → 그대로
-function normalizeTickerForYahoo(ticker){
-  if(!ticker) return null;
-  ticker=ticker.trim().toUpperCase();
-  if(ticker.includes('.')) return ticker; // 이미 Yahoo 형식
-  // 6자리 숫자이면 코스피 기본 가정 (.KS)
-  if(/^\d{6}$/.test(ticker)) return ticker+'.KS';
-  return ticker;
-}
-function extractStockCode(ticker){
-  // 네이버용 순수 숫자 코드
-  if(!ticker) return null;
+// ═══════════════════════════════════════════
+// 주식 종가 조회 — 공공데이터포털 금융위원회 주식시세정보
+// ═══════════════════════════════════════════
+
+function extractKrCode(ticker){
+  if(!ticker)return null;
   const m=ticker.trim().match(/^(\d{6})/);
   return m?m[1]:null;
 }
-
-async function fetchStockPriceNaver(code){
-  // 네이버 금융 비공식 JSON API (CORS 허용됨)
-  const url=`https://api.stock.naver.com/stock/${code}/basic`;
-  const res=await fetch(url,{signal:AbortSignal.timeout(6000)});
-  if(!res.ok) throw new Error('naver '+res.status);
-  const json=await res.json();
-  const price=json?.closePrice||json?.currentPrice;
-  if(!price) throw new Error('no price');
-  // 쉼표 제거 후 숫자 변환
-  return Math.round(Number(String(price).replace(/,/g,'')));
+function isUsStock(ticker){
+  if(!ticker)return false;
+  return /[A-Za-z]/.test(ticker.replace(/\.\w+$/,'').trim());
 }
-
-async function fetchStockPriceYahoo(ticker){
-  const t=normalizeTickerForYahoo(ticker);
-  if(!t) throw new Error('no ticker');
-  // 1차: 직접 호출
+function getRecentBizDates(n=5){
+  const dates=[];const d=new Date();
+  while(dates.length<n){
+    d.setDate(d.getDate()-1);
+    const dow=d.getDay();
+    if(dow!==0&&dow!==6){
+      const y=d.getFullYear();
+      const m=String(d.getMonth()+1).padStart(2,'0');
+      const dd=String(d.getDate()).padStart(2,'0');
+      dates.push(`${y}${m}${dd}`);
+    }
+  }
+  return dates;
+}
+async function fetchKrStockPrice(code,apiKey){
+  const dates=getRecentBizDates(5);
+  for(const basDt of dates){
+    const url=`https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo`
+      +`?serviceKey=${encodeURIComponent(apiKey)}&numOfRows=1&pageNo=1&resultType=json`
+      +`&basDt=${basDt}&srtnCd=${code}`;
+    try{
+      const res=await fetch(url,{signal:AbortSignal.timeout(8000)});
+      if(!res.ok)continue;
+      const json=await res.json();
+      const item=json?.response?.body?.items?.item;
+      const row=Array.isArray(item)?item[0]:item;
+      if(row?.clpr){
+        return{price:Math.round(Number(String(row.clpr).replace(/,/g,''))),date:basDt};
+      }
+    }catch(e){console.info('govapi fail:',basDt,e.message);}
+  }
+  throw new Error('종가 조회 실패');
+}
+async function fetchUsStockPrice(ticker){
+  const t=ticker.trim().toUpperCase();
   try{
-    const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?interval=1d&range=1d`;
-    const res=await fetch(url,{signal:AbortSignal.timeout(6000)});
+    const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?interval=1d&range=5d`;
+    const res=await fetch(url,{signal:AbortSignal.timeout(7000)});
     if(res.ok){
       const json=await res.json();
       const meta=json?.chart?.result?.[0]?.meta;
       const price=meta?.regularMarketPrice||meta?.previousClose;
-      if(price)return Math.round(price);
+      if(price)return Math.round(price*100)/100;
     }
-  }catch(e){console.info('Yahoo direct fail:',e.message);}
-  // 2차: allorigins 프록시
-  const targetUrl=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?interval=1d&range=1d`;
-  const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-  const res2=await fetch(proxy,{signal:AbortSignal.timeout(10000)});
-  if(!res2.ok) throw new Error('proxy '+res2.status);
+  }catch(e){console.info('yahoo:',e.message);}
+  const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=5d`)}`;
+  const res2=await fetch(proxy,{signal:AbortSignal.timeout(12000)});
+  if(!res2.ok)throw new Error('proxy '+res2.status);
   const outer=await res2.json();
   const json=JSON.parse(outer.contents||'{}');
   const meta=json?.chart?.result?.[0]?.meta;
   const price=meta?.regularMarketPrice||meta?.previousClose;
-  if(!price) throw new Error('no price');
-  return Math.round(price);
+  if(!price)throw new Error('no price');
+  return Math.round(price*100)/100;
 }
-
 async function updateStockPrices(){
+  const apiKey=gdCfg.stockApiKey||'';
   const stocks=data.assets.filter(a=>(a.type==='stock'||a.type==='reit')&&a.ticker);
   if(!stocks.length){showToast('⚠️ 종목코드가 등록된 주식/리츠가 없습니다');return;}
-
+  const hasKr=stocks.some(a=>!isUsStock(a.ticker));
+  if(hasKr&&!apiKey){showToast('⚠️ ⚙️ 설정에서 공공데이터 인증키를 입력해주세요');return;}
   stocks.forEach(a=>{
     const el=document.getElementById('ss-'+a.id);
-    if(el){el.className='price-status loading';el.innerHTML='<span class="spin">⟳</span>';}
+    if(el){el.className='price-status loading';el.innerHTML='<span class=\'spin\'>⟳</span> 조회중';}
   });
-
   let ok=0,fail=0;
   for(const a of stocks){
     let price=null,source='';
     try{
-      // 1차: 네이버 금융
-      const code=extractStockCode(a.ticker);
-      if(code){
-        try{ price=await fetchStockPriceNaver(code); source='네이버'; }
-        catch(e){ console.info('Naver fallback:',e.message); }
-      }
-      // 2차: Yahoo Finance
-      if(!price){
-        price=await fetchStockPriceYahoo(a.ticker);
+      const krCode=extractKrCode(a.ticker);
+      const usStock=isUsStock(a.ticker);
+      if(!usStock&&krCode&&apiKey){
+        const result=await fetchKrStockPrice(krCode,apiKey);
+        price=result.price;
+        const d=result.date;
+        source=`종가(${d.slice(0,4)}.${d.slice(4,6)}.${d.slice(6,8)})`;
+      }else if(usStock){
+        price=await fetchUsStockPrice(a.ticker);
         source='Yahoo';
-      }
-      if(!price) throw new Error('모든 소스 실패');
-
+      }else{throw new Error('조건 불충족');}
+      if(!price)throw new Error('가격 없음');
       a.curPrice=price;
-      a.value=Math.round(price*(a.qty||0));
-
+      a.value=Math.round(price*(a.qty||1));
+      if(a.dividendPerShare&&a.qty)a.annualDividend=a.dividendPerShare*a.qty;
       const sp=document.getElementById('sp-'+a.id);if(sp)sp.textContent=won(a.curPrice);
       const sv=document.getElementById('sv-'+a.id);if(sv)sv.textContent=won(a.value);
       const gain=a.value-Number(a.cost||0);
@@ -1387,7 +1411,7 @@ async function updateStockPrices(){
       const sg=document.getElementById('sg-'+a.id);
       if(sg){sg.textContent=`${gain>=0?'+':''}${won(gain)} (${gp}%)`;sg.style.color=gain>=0?'var(--green)':'var(--red)';}
       const ss=document.getElementById('ss-'+a.id);
-      if(ss){ss.textContent=`${source} ✓`;ss.className='price-status ok';}
+      if(ss){ss.textContent=source+' ✓';ss.className='price-status ok';}
       ok++;
     }catch(e){
       const ss=document.getElementById('ss-'+a.id);
@@ -1398,8 +1422,10 @@ async function updateStockPrices(){
   save();
   const t=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   const lu=document.getElementById('stock-last-update');if(lu)lu.textContent=`최종: ${t}`;
-  showToast(`✅ 주식 ${ok}건 완료${fail?` / ${fail}건 조회실패 (수동입력 필요)`:''}`);
+  showToast(`✅ 주식 업데이트 완료 (성공 ${ok}건${fail?` / 실패 ${fail}건`:''})`);
+  refreshAllAssetViews();
 }
+
 
 // ── 채권: KRX 공개 API (1차) → KOFIA allorigins 프록시 (2차) ───────
 // shinhansec.com은 CORS 차단 + 로그인 세션 필요로 브라우저에서 직접 호출 불가.
@@ -2058,20 +2084,20 @@ function gdEnableButtons(loggedIn){
 function openGdriveConfig(){
   document.getElementById('cfg-client-id').value=gdCfg.clientId||'';
   document.getElementById('cfg-api-key').value=gdCfg.apiKey||'';
+  document.getElementById('cfg-stock-api-key').value=gdCfg.stockApiKey||'';
   document.getElementById('gdriveConfigModal').classList.add('open');
 }
 function closeGdriveConfig(){document.getElementById('gdriveConfigModal').classList.remove('open');}
 function saveGdriveConfig(){
   const cid=document.getElementById('cfg-client-id').value.trim();
   const ak=document.getElementById('cfg-api-key').value.trim();
-  if(!cid||!ak){showToast('⚠️ CLIENT_ID와 API_KEY를 모두 입력해주세요');return;}
-  gdCfg={...gdCfg,clientId:cid,apiKey:ak};
+  const sk=document.getElementById('cfg-stock-api-key').value.trim();
+  if(!cid&&!ak&&!sk){showToast('⚠️ 설정값을 입력해주세요');return;}
+  gdCfg={...gdCfg,clientId:cid,apiKey:ak,stockApiKey:sk};
   localStorage.setItem(GD_KEY,JSON.stringify(gdCfg));
   closeGdriveConfig();
-  gdAccessToken=null;
-  gdTokenClient=null;
-  gdInitGIS();
-  showToast('✅ 설정 저장 완료! 로그인 버튼을 눌러 연결하세요.');
+  if(cid){gdAccessToken=null;gdTokenClient=null;gdInitGIS();}
+  showToast('✅ 설정 저장 완료!');
 }
 
 // ── 클릭 이벤트 ──────────────────────────────
@@ -2277,6 +2303,12 @@ window.addEventListener('load',()=>{
   check();
 });
 load();
+// 공공데이터 인증키 기본값 (미설정 시 자동 주입)
+gdCfg=JSON.parse(localStorage.getItem(GD_KEY)||'{}');
+if(!gdCfg.stockApiKey){
+  gdCfg.stockApiKey='4357bc5554bc3b3a7acbc6b1c1dfbf8f75c70d22444925405cfd4e590a3c2440';
+  localStorage.setItem(GD_KEY,JSON.stringify(gdCfg));
+}
 renderDashboard();
 
 // ── Service Worker 등록 (PWA) ──────────────
