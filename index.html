@@ -461,8 +461,23 @@
     </div>
   </div>
   <div class="card">
-    <div class="card-title">💼 전체 자산 목록</div>
-    <table><thead><tr><th>자산명</th><th>구성원</th><th>유형</th><th>평가금액</th><th>취득금액</th><th>손익</th><th>연예상수익</th><th>관리</th></tr></thead>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="card-title" style="margin:0">💼 전체 자산 목록</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-size:12px;color:var(--text3)">정렬:</span>
+        <select class="form-select" id="asset-sort" onchange="renderAssets()" style="padding:4px 8px;font-size:12px;width:auto">
+          <option value="default">기본</option>
+          <option value="value-desc">금액 높은순</option>
+          <option value="value-asc">금액 낮은순</option>
+          <option value="name-asc">이름 오름차순</option>
+          <option value="name-desc">이름 내림차순</option>
+          <option value="gain-desc">손익 높은순</option>
+          <option value="gain-asc">손익 낮은순</option>
+          <option value="income-desc">이자·배당 높은순</option>
+        </select>
+      </div>
+    </div>
+    <table><thead><tr><th>자산명</th><th>구성원</th><th>유형</th><th>평가금액</th><th>취득금액</th><th>손익</th><th>이자·배당 소득</th><th>관리</th></tr></thead>
     <tbody id="all-assets-body"></tbody></table>
   </div>
 </div>
@@ -716,6 +731,10 @@
           <div class="form-group">
             <label class="form-label">연간 예상 배당 총액 (자동계산)</label>
             <input class="form-input" id="a-dividend" type="number" readonly style="color:var(--gold);opacity:.9" placeholder="주당배당 × 수량">
+            <label style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:12px;color:var(--text2);cursor:pointer">
+              <input type="checkbox" id="a-dividend-separate" style="width:15px;height:15px;accent-color:var(--gold)">
+              <span>분리과세 <span style="color:var(--gold)">(분)</span> — 소득관리 분리과세 합산</span>
+            </label>
           </div>
         </div>
         <div class="form-row">
@@ -1003,6 +1022,11 @@ const totalIncome  =types=>data.incomes.filter(i=>types.includes(i.type)).reduce
 const isFinancial  =t  =>['deposit','stock','reit','bond','fund','insurance','pension','crypto','cash'].includes(t);
 const annualReturn =a  =>(a.type==='stock'||a.type==='reit')?Number(a.annualDividend||0):a.type==='bond'?Number(a.annualInterest||0):0;
 
+// 자산에서 발생하는 이자·배당 소득 (분리과세 제외)
+const assetDividendIncome=()=>data.assets.filter(a=>!a.dividendSeparate).reduce((s,a)=>s+annualReturn(a),0);
+// 자산에서 발생하는 분리과세 배당 소득
+const assetSeparateIncome=()=>data.assets.filter(a=>a.dividendSeparate).reduce((s,a)=>s+annualReturn(a),0);
+
 // ═══════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════
@@ -1019,7 +1043,9 @@ function renderDashboard(){
   document.getElementById('total-financial').textContent=won(fin);
   document.getElementById('total-real-estate').textContent=won(totalByType('real_estate'));
   document.getElementById('total-debt-dash').textContent=won(debt);
-  document.getElementById('total-income').textContent=won(data.incomes.reduce((s,i)=>s+Number(i.amount),0));
+  document.getElementById('total-income').textContent=won(
+    data.incomes.reduce((s,i)=>s+Number(i.amount),0)+assetDividendIncome()+assetSeparateIncome()
+  );
 
   const mc=['#d4af6a','#6abf8a','#7b9de0','#9b6ad4','#d46a6a','#7eb8a4'];
   renderPie('memberPieChart',data.members.map(m=>m.name),data.members.map(m=>totalByMember(m.id)),mc);
@@ -1147,16 +1173,33 @@ function renderAssets(){
     </tr>`;
   }).join('');
 
+  // 3번: 정렬
+  const sortKey=(document.getElementById('asset-sort')||{value:'default'}).value;
+  let sortedAssets=[...data.assets];
+  if(sortKey==='value-desc') sortedAssets.sort((a,b)=>b.value-a.value);
+  else if(sortKey==='value-asc') sortedAssets.sort((a,b)=>a.value-b.value);
+  else if(sortKey==='name-asc') sortedAssets.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  else if(sortKey==='name-desc') sortedAssets.sort((a,b)=>b.name.localeCompare(a.name,'ko'));
+  else if(sortKey==='gain-desc') sortedAssets.sort((a,b)=>(b.value-b.cost)-(a.value-a.cost));
+  else if(sortKey==='gain-asc') sortedAssets.sort((a,b)=>(a.value-a.cost)-(b.value-b.cost));
+  else if(sortKey==='income-desc') sortedAssets.sort((a,b)=>annualReturn(b)-annualReturn(a));
+
   document.getElementById('all-assets-body').innerHTML=!data.assets.length
     ?'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:28px">자산을 추가해 주세요</td></tr>'
-    :data.assets.map(a=>{
+    :sortedAssets.map(a=>{
       const m=data.members.find(m=>m.id===a.memberId);
-      const at=ASSET_TYPES[a.type];
+      const at=ASSET_TYPES[a.type]||ASSET_TYPES.other;
       const gain=Number(a.value)-Number(a.cost||0);
       const gp=a.cost>0?Math.round(gain/a.cost*100):0;
       const ar=annualReturn(a);
+      // 4·5번: 이자·배당 소득 + 분리과세 표시
+      let arDisplay='-';
+      if(ar){
+        const sepTag=a.dividendSeparate?` <span style="color:var(--gold);font-size:10px">(분)</span>`:'';
+        arDisplay=`${won(ar)}${sepTag}`;
+      }
       let detail='';
-      if(a.type==='stock'&&a.ticker)detail=`${a.ticker} | ${a.qty}주 @ ${won(a.curPrice)}`;
+      if((a.type==='stock'||a.type==='reit')&&a.ticker)detail=`${a.ticker} | ${a.qty}주 @ ${won(a.curPrice)}`;
       if(a.type==='bond'&&a.bondCode)detail=`만기 ${a.maturity||'-'} | 표면이율 ${a.couponRate||0}%`;
       return`<tr>
         <td><div style="font-weight:600">${a.name}</div>${detail?`<div style="font-size:11px;color:var(--text3)">${detail}</div>`:''}</td>
@@ -1165,7 +1208,7 @@ function renderAssets(){
         <td class="mono">${won(a.value)}</td>
         <td class="mono" style="color:var(--text3)">${won(a.cost)}</td>
         <td class="mono" style="color:${gain>=0?'var(--green)':'var(--red)'}">${gain>=0?'+':''}${won(gain)} (${gp}%)</td>
-        <td class="mono" style="color:var(--gold)">${ar?won(ar):'-'}</td>
+        <td class="mono" style="color:var(--gold)">${arDisplay}</td>
         <td><div style="display:flex;gap:5px">
           <button class="btn btn-ghost btn-sm" onclick="openAssetModal('${a.id}')">✏️</button>
           <button class="btn btn-danger btn-sm" onclick="deleteAsset('${a.id}')">🗑️</button>
@@ -1529,40 +1572,68 @@ function deleteDebt(id){
 // INCOME
 // ═══════════════════════════════════════════
 function renderIncome(){
+  // 소득관리 입력값 + 자산 배당 합산
+  const interestFromIncome=totalIncome(['interest','dividend']);
+  const interestFromAssets=assetDividendIncome();
+  const separateFromIncome=totalIncome(['separate']);
+  const separateFromAssets=assetSeparateIncome();
+
   document.getElementById('income-nontax').textContent=won(totalIncome(['nontax']));
-  document.getElementById('income-interest').textContent=won(totalIncome(['interest','dividend']));
-  document.getElementById('income-separate').textContent=won(totalIncome(['separate']));
+  document.getElementById('income-interest').textContent=won(interestFromIncome+interestFromAssets);
+  document.getElementById('income-separate').textContent=won(separateFromIncome+separateFromAssets);
   document.getElementById('income-comprehensive').textContent=won(totalIncome(['comprehensive']));
-  document.getElementById('financial-income-alert').style.display=totalIncome(['interest','dividend'])>20000000?'block':'none';
+  document.getElementById('financial-income-alert').style.display=(interestFromIncome+interestFromAssets)>20000000?'block':'none';
+
+  // 자산 배당 항목 목록 생성 (소득 섹션에 표시용)
+  const assetDividendItems=data.assets.filter(a=>annualReturn(a)>0&&!a.dividendSeparate).map(a=>({
+    name:a.name, amount:annualReturn(a), type:'dividend', fromAsset:true,
+    memberId:a.memberId, id:a.id, separate:false
+  }));
+  const assetSeparateItems=data.assets.filter(a=>annualReturn(a)>0&&a.dividendSeparate).map(a=>({
+    name:a.name, amount:annualReturn(a), type:'separate', fromAsset:true,
+    memberId:a.memberId, id:a.id, separate:true
+  }));
 
   document.getElementById('income-sections').innerHTML=[
-    {label:'비과세 소득',             types:['nontax'],                color:'var(--green)'},
-    {label:'이자·배당 소득 (금융소득)',types:['interest','dividend'],   color:'var(--blue)'},
-    {label:'분리과세 소득',           types:['separate'],              color:'var(--gold)'},
-    {label:'종합과세 소득',           types:['comprehensive'],         color:'var(--red)'},
+    {label:'비과세 소득',             types:['nontax'],              color:'var(--green)',  extraItems:[]},
+    {label:'이자·배당 소득 (금융소득)',types:['interest','dividend'],color:'var(--blue)',   extraItems:assetDividendItems},
+    {label:'분리과세 소득',           types:['separate'],            color:'var(--gold)',   extraItems:assetSeparateItems},
+    {label:'종합과세 소득',           types:['comprehensive'],       color:'var(--red)',    extraItems:[]},
   ].map(g=>{
     const items=data.incomes.filter(i=>g.types.includes(i.type));
-    const total=items.reduce((s,i)=>s+Number(i.amount),0);
+    const total=items.reduce((s,i)=>s+Number(i.amount),0)
+               +g.extraItems.reduce((s,i)=>s+i.amount,0);
+    const allRows=[...items.map(i=>{
+      const m=data.members.find(m=>m.id===i.memberId);
+      const it=INCOME_TYPES[i.type];
+      return`<tr><td>${i.name}</td>
+        <td><span class="tag ${it.tag}">${it.label}</span></td>
+        <td>${m?m.icon+' '+m.name:'-'}</td>
+        <td class="mono">${won(i.amount)}</td>
+        <td style="color:var(--text3);font-size:12px">${i.note||'-'}</td>
+        <td><div style="display:flex;gap:5px">
+          <button class="btn btn-ghost btn-sm" onclick="openIncomeModal('${i.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteIncome('${i.id}')">🗑️</button>
+        </div></td></tr>`;
+    }),...g.extraItems.map(i=>{
+      const m=data.members.find(m=>m.id===i.memberId);
+      const sepBadge=i.separate?` <span style="color:var(--gold);font-size:10px">(분)</span>`:'';
+      return`<tr style="opacity:.85">
+        <td>${i.name}${sepBadge} <span style="font-size:10px;color:var(--text3)">[자산]</span></td>
+        <td><span class="tag tag-gold">배당</span></td>
+        <td>${m?m.icon+' '+m.name:'-'}</td>
+        <td class="mono">${won(i.amount)}</td>
+        <td style="color:var(--text3);font-size:12px">자산에서 자동 연동</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openAssetModal('${i.id}')">✏️</button></td></tr>`;
+    })];
     return`<div class="card" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
         <div class="card-title" style="margin:0">${g.label}</div>
         <span class="mono" style="color:${g.color}">${won(total)}</span>
       </div>
-      ${!items.length?'<p style="color:var(--text3);font-size:13px;text-align:center;padding:16px 0">소득 항목 없음</p>'
+      ${!allRows.length?'<p style="color:var(--text3);font-size:13px;text-align:center;padding:16px 0">소득 항목 없음</p>'
       :`<table><thead><tr><th>항목</th><th>구분</th><th>구성원</th><th>연간금액</th><th>비고</th><th>관리</th></tr></thead>
-        <tbody>${items.map(i=>{
-          const m=data.members.find(m=>m.id===i.memberId);
-          const it=INCOME_TYPES[i.type];
-          return`<tr><td>${i.name}</td>
-            <td><span class="tag ${it.tag}">${it.label}</span></td>
-            <td>${m?m.icon+' '+m.name:'-'}</td>
-            <td class="mono">${won(i.amount)}</td>
-            <td style="color:var(--text3);font-size:12px">${i.note||'-'}</td>
-            <td><div style="display:flex;gap:5px">
-              <button class="btn btn-ghost btn-sm" onclick="openIncomeModal('${i.id}')">✏️</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteIncome('${i.id}')">🗑️</button>
-            </div></td></tr>`;
-        }).join('')}</tbody></table>`}
+        <tbody>${allRows.join('')}</tbody></table>`}
     </div>`;
   }).join('');
 }
@@ -1738,6 +1809,8 @@ function openAssetModal(id){
    'a-bond-code','a-maturity','a-face-value','a-coupon-rate',
    'a-bond-buy','a-bond-cur','a-bond-interest','a-bond-val-display'
   ].forEach(fid=>{const el=document.getElementById(fid);if(el)el.value='';});
+  const sepCb=document.getElementById('a-dividend-separate');
+  if(sepCb)sepCb.checked=false;
 
   document.getElementById('assetModal').classList.add('open');
   if(id){
@@ -1757,6 +1830,7 @@ function openAssetModal(id){
       document.getElementById('a-dividend-per-share').value=a.dividendPerShare||'';
       document.getElementById('a-dividend').value=a.annualDividend||'';
       document.getElementById('a-stock-val-display').value=a.value||'';
+      if(sepCb)sepCb.checked=!!a.dividendSeparate;
     }else if(a.type==='bond'){
       document.getElementById('a-bond-code').value=a.bondCode||'';
       document.getElementById('a-maturity').value=a.maturity||'';
@@ -1794,6 +1868,7 @@ function saveAsset(){
     obj={...obj,ticker:document.getElementById('a-ticker').value.trim(),
       qty,buyPrice,curPrice,
       dividendPerShare:dps,
+      dividendSeparate:!!(document.getElementById('a-dividend-separate')?.checked),
       annualDividend:dps&&qty?dps*qty:(Number(document.getElementById('a-dividend').value)||0),
       value:curPrice*qty||Number(document.getElementById('a-stock-val-display').value)||0,
       cost:buyPrice*qty};
