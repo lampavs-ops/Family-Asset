@@ -1343,51 +1343,35 @@ function getRecentBizDates(n=5){
 async function fetchKrStockPrice(code,apiKey){
   const baseUrl=`https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo`;
 
-  function findMatchingItem(json, code){
+  // API가 srtnCd 파라미터를 필터로 쓰지 않고 전체 반환함 → 응답에서 직접 매칭
+  async function fetchAndMatch(url, code){
+    const res=await fetch(url,{signal:AbortSignal.timeout(10000)});
+    if(!res.ok)return null;
+    const json=await res.json();
+    const totalCount=json?.response?.body?.totalCount||0;
     const items=json?.response?.body?.items?.item;
-    console.log(`[API 응답] code=${code}, items=`, JSON.stringify(items)?.slice(0,300));
     if(!items)return null;
     const list=Array.isArray(items)?items:[items];
-    const matched=list.find(i=>
-      i.srtnCd===code ||
-      i.srtnCd===code.padStart(6,'0') ||
-      (i.isinCd&&i.isinCd.slice(-6)===code.slice(-6))
-    );
-    console.log(`[매칭] code=${code} → matched srtnCd=${matched?.srtnCd}, clpr=${matched?.clpr}`);
-    return matched||list[0];
+    // srtnCd 정확 매칭
+    const matched=list.find(i=>i.srtnCd&&i.srtnCd.trim()===code.trim());
+    if(matched?.clpr){
+      const price=Math.round(Number(String(matched.clpr).replace(/,/g,'')));
+      console.log(`[성공] ${code} → ${price}원 (${matched.basDt})`);
+      if(price>0)return{price,date:matched.basDt||''};
+    }
+    console.log(`[미매칭] ${code} - 응답 종목들:`, list.slice(0,3).map(i=>i.srtnCd).join(','));
+    return null;
   }
 
-  // 1차: 날짜 없이 최신 데이터 조회
-  try{
-    const url=`${baseUrl}?serviceKey=${apiKey}&numOfRows=5&pageNo=1&resultType=json&srtnCd=${code}`;
-    console.log(`[요청] ${url}`);
-    const res=await fetch(url,{signal:AbortSignal.timeout(8000)});
-    if(res.ok){
-      const json=await res.json();
-      const row=findMatchingItem(json,code);
-      if(row?.clpr){
-        const price=Math.round(Number(String(row.clpr).replace(/,/g,'')));
-        const date=row.basDt||'';
-        console.log(`[결과] code=${code}, price=${price}, date=${date}`);
-        if(price>0)return{price,date};
-      }
-    }
-  }catch(e){console.info('govapi no-date fail:',code,e.message);}
-
-  // 2차: 최근 영업일별 순차 시도
-  const dates=getRecentBizDates(7);
+  const dates=getRecentBizDates(5);
   for(const basDt of dates){
     try{
-      const url=`${baseUrl}?serviceKey=${apiKey}&numOfRows=5&pageNo=1&resultType=json&basDt=${basDt}&srtnCd=${code}`;
-      const res=await fetch(url,{signal:AbortSignal.timeout(8000)});
-      if(!res.ok)continue;
-      const json=await res.json();
-      const row=findMatchingItem(json,code);
-      if(row?.clpr){
-        const price=Math.round(Number(String(row.clpr).replace(/,/g,'')));
-        if(price>0)return{price,date:basDt};
-      }
-    }catch(e){console.info('govapi fail:',basDt,e.message);}
+      // numOfRows를 충분히 크게 해서 해당 날짜 전체 데이터에서 검색
+      const url=`${baseUrl}?serviceKey=${apiKey}&numOfRows=5000&pageNo=1&resultType=json&basDt=${basDt}`;
+      console.log(`[조회] ${code} / ${basDt}`);
+      const result=await fetchAndMatch(url, code);
+      if(result)return result;
+    }catch(e){console.info(`[실패] ${code} ${basDt}:`,e.message);}
   }
   throw new Error('종가 조회 실패');
 }
