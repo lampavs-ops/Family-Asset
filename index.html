@@ -661,16 +661,17 @@
       <div class="form-group"><label class="form-label">소유 구성원</label><select class="form-select" id="a-member"></select></div>
       <div class="form-group"><label class="form-label">자산 유형</label>
         <select class="form-select" id="a-type" onchange="onAssetTypeChange()">
-          <option value="real_estate">부동산</option>
-          <option value="deposit">예금·적금</option>
-          <option value="stock">주식</option>
-          <option value="bond">채권</option>
-          <option value="fund">펀드·ETF</option>
-          <option value="insurance">보험</option>
-          <option value="pension">연금</option>
-          <option value="crypto">가상자산</option>
-          <option value="cash">현금</option>
-          <option value="other">기타</option>
+          <option value="real_estate">🏠 부동산</option>
+          <option value="deposit">🏦 예금·적금</option>
+          <option value="stock">📈 주식</option>
+          <option value="reit">🏢 리츠</option>
+          <option value="bond">📄 채권</option>
+          <option value="fund">📊 펀드·ETF</option>
+          <option value="insurance">🛡️ 보험</option>
+          <option value="pension">🎗️ 연금</option>
+          <option value="crypto">₿ 가상자산</option>
+          <option value="cash">💵 현금</option>
+          <option value="other">📦 기타</option>
         </select>
       </div>
     </div>
@@ -686,7 +687,7 @@
     <!-- 주식 전용 -->
     <div id="a-stock-fields" style="display:none">
       <div class="modal-section">
-        <div class="modal-section-title">📈 주식 상세 정보</div>
+        <div class="modal-section-title" id="a-stock-section-title">📈 주식 상세 정보</div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">종목코드 (6자리 또는 Yahoo 형식)</label>
@@ -709,9 +710,15 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">연간 예상 배당액 (원)</label>
-            <input class="form-input" id="a-dividend" type="number" placeholder="0">
+            <label class="form-label">주당 예상 배당금 (원/주)</label>
+            <input class="form-input" id="a-dividend-per-share" type="number" placeholder="0" oninput="calcDividend()">
           </div>
+          <div class="form-group">
+            <label class="form-label">연간 예상 배당 총액 (자동계산)</label>
+            <input class="form-input" id="a-dividend" type="number" readonly style="color:var(--gold);opacity:.9" placeholder="주당배당 × 수량">
+          </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label class="form-label">평가금액 (자동계산)</label>
             <input class="form-input" id="a-stock-val-display" type="number" readonly style="color:var(--gold);opacity:.9" placeholder="현재가 × 수량">
@@ -878,6 +885,7 @@ const ASSET_TYPES = {
   real_estate:{label:'부동산',   color:'#d4af6a',icon:'🏠'},
   deposit:    {label:'예금·적금',color:'#6abf8a',icon:'🏦'},
   stock:      {label:'주식',     color:'#7b9de0',icon:'📈'},
+  reit:       {label:'리츠',     color:'#e0a87b',icon:'🏢'},
   bond:       {label:'채권',     color:'#9b6ad4',icon:'📄'},
   fund:       {label:'펀드·ETF', color:'#7eb8a4',icon:'📊'},
   insurance:  {label:'보험',     color:'#d46a6a',icon:'🛡️'},
@@ -992,8 +1000,8 @@ const totalByType  =t  =>data.assets.filter(a=>a.type===t).reduce((s,a)=>s+Numbe
 const totalAssets  =()  =>data.assets.reduce((s,a)=>s+Number(a.value),0);
 const totalDebts   =()  =>(data.debts||[]).reduce((s,d)=>s+Number(d.amount),0);
 const totalIncome  =types=>data.incomes.filter(i=>types.includes(i.type)).reduce((s,i)=>s+Number(i.amount),0);
-const isFinancial  =t  =>['deposit','stock','bond','fund','insurance','pension','crypto','cash'].includes(t);
-const annualReturn =a  =>a.type==='stock'?Number(a.annualDividend||0):a.type==='bond'?Number(a.annualInterest||0):0;
+const isFinancial  =t  =>['deposit','stock','reit','bond','fund','insurance','pension','crypto','cash'].includes(t);
+const annualReturn =a  =>(a.type==='stock'||a.type==='reit')?Number(a.annualDividend||0):a.type==='bond'?Number(a.annualInterest||0):0;
 
 // ═══════════════════════════════════════════
 // DASHBOARD
@@ -1170,7 +1178,7 @@ function renderAssets(){
 // PRICE PAGE
 // ═══════════════════════════════════════════
 function renderPricePage(){
-  const stocks=data.assets.filter(a=>a.type==='stock');
+  const stocks=data.assets.filter(a=>(a.type==='stock'||a.type==='reit'));
   const bonds=data.assets.filter(a=>a.type==='bond');
 
   const sel=document.getElementById('stock-price-list');
@@ -1252,10 +1260,24 @@ async function fetchStockPriceNaver(code){
 async function fetchStockPriceYahoo(ticker){
   const t=normalizeTickerForYahoo(ticker);
   if(!t) throw new Error('no ticker');
-  const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?interval=1d&range=1d`;
-  const res=await fetch(url,{signal:AbortSignal.timeout(8000)});
-  if(!res.ok) throw new Error('yahoo '+res.status);
-  const json=await res.json();
+  // 1차: 직접 호출
+  try{
+    const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?interval=1d&range=1d`;
+    const res=await fetch(url,{signal:AbortSignal.timeout(6000)});
+    if(res.ok){
+      const json=await res.json();
+      const meta=json?.chart?.result?.[0]?.meta;
+      const price=meta?.regularMarketPrice||meta?.previousClose;
+      if(price)return Math.round(price);
+    }
+  }catch(e){console.info('Yahoo direct fail:',e.message);}
+  // 2차: allorigins 프록시
+  const targetUrl=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?interval=1d&range=1d`;
+  const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+  const res2=await fetch(proxy,{signal:AbortSignal.timeout(10000)});
+  if(!res2.ok) throw new Error('proxy '+res2.status);
+  const outer=await res2.json();
+  const json=JSON.parse(outer.contents||'{}');
   const meta=json?.chart?.result?.[0]?.meta;
   const price=meta?.regularMarketPrice||meta?.previousClose;
   if(!price) throw new Error('no price');
@@ -1263,8 +1285,8 @@ async function fetchStockPriceYahoo(ticker){
 }
 
 async function updateStockPrices(){
-  const stocks=data.assets.filter(a=>a.type==='stock'&&a.ticker);
-  if(!stocks.length){showToast('⚠️ 종목코드가 등록된 주식이 없습니다');return;}
+  const stocks=data.assets.filter(a=>(a.type==='stock'||a.type==='reit')&&a.ticker);
+  if(!stocks.length){showToast('⚠️ 종목코드가 등록된 주식/리츠가 없습니다');return;}
 
   stocks.forEach(a=>{
     const el=document.getElementById('ss-'+a.id);
@@ -1636,15 +1658,27 @@ function saveMonthlySnapshot(){
 // ═══════════════════════════════════════════
 function onAssetTypeChange(){
   const t=document.getElementById('a-type').value;
-  document.getElementById('a-basic-fields').style.display=(t==='stock'||t==='bond')?'none':'block';
-  document.getElementById('a-stock-fields').style.display=t==='stock'?'block':'none';
+  const isStockLike=t==='stock'||t==='reit';
+  document.getElementById('a-basic-fields').style.display=(isStockLike||t==='bond')?'none':'block';
+  document.getElementById('a-stock-fields').style.display=isStockLike?'block':'none';
   document.getElementById('a-bond-fields').style.display=t==='bond'?'block':'none';
+  // 주식/리츠 구분 레이블 변경
+  const stockTitle=document.getElementById('a-stock-section-title');
+  if(stockTitle)stockTitle.textContent=t==='reit'?'🏢 리츠 상세 정보':'📈 주식 상세 정보';
 }
 
 function calcStockValue(){
   const qty=Number(document.getElementById('a-qty').value)||0;
   const cur=Number(document.getElementById('a-cur-price').value)||0;
   document.getElementById('a-stock-val-display').value=qty&&cur?qty*cur:'';
+  calcDividend();
+}
+
+function calcDividend(){
+  const qty=Number(document.getElementById('a-qty').value)||0;
+  const dps=Number(document.getElementById('a-dividend-per-share').value)||0;
+  if(qty&&dps)document.getElementById('a-dividend').value=qty*dps;
+  else document.getElementById('a-dividend').value='';
 }
 
 function calcBondFields(){
@@ -1699,8 +1733,9 @@ function deleteMember(id){
 function openAssetModal(id){
   document.getElementById('a-member').innerHTML=data.members.map(m=>`<option value="${m.id}">${m.icon} ${m.name}</option>`).join('');
   // reset
-  ['a-name','a-value','a-cost','a-note','a-ticker','a-qty','a-buy-price','a-cur-price','a-dividend',
-   'a-stock-val-display','a-bond-code','a-maturity','a-face-value','a-coupon-rate',
+  ['a-name','a-value','a-cost','a-note','a-ticker','a-qty','a-buy-price','a-cur-price',
+   'a-dividend-per-share','a-dividend','a-stock-val-display',
+   'a-bond-code','a-maturity','a-face-value','a-coupon-rate',
    'a-bond-buy','a-bond-cur','a-bond-interest','a-bond-val-display'
   ].forEach(fid=>{const el=document.getElementById(fid);if(el)el.value='';});
 
@@ -1714,11 +1749,12 @@ function openAssetModal(id){
     document.getElementById('a-type').value=a.type;
     document.getElementById('a-note').value=a.note||'';
     onAssetTypeChange();
-    if(a.type==='stock'){
+    if(a.type==='stock'||a.type==='reit'){
       document.getElementById('a-ticker').value=a.ticker||'';
       document.getElementById('a-qty').value=a.qty||'';
       document.getElementById('a-buy-price').value=a.buyPrice||'';
       document.getElementById('a-cur-price').value=a.curPrice||'';
+      document.getElementById('a-dividend-per-share').value=a.dividendPerShare||'';
       document.getElementById('a-dividend').value=a.annualDividend||'';
       document.getElementById('a-stock-val-display').value=a.value||'';
     }else if(a.type==='bond'){
@@ -1750,13 +1786,15 @@ function saveAsset(){
   const id=document.getElementById('editAssetId').value;
   let obj={name,memberId:document.getElementById('a-member').value,type,note:document.getElementById('a-note').value};
 
-  if(type==='stock'){
+  if(type==='stock'||type==='reit'){
     const qty=Number(document.getElementById('a-qty').value)||0;
     const buyPrice=Number(document.getElementById('a-buy-price').value)||0;
     const curPrice=Number(document.getElementById('a-cur-price').value)||0;
+    const dps=Number(document.getElementById('a-dividend-per-share').value)||0;
     obj={...obj,ticker:document.getElementById('a-ticker').value.trim(),
       qty,buyPrice,curPrice,
-      annualDividend:Number(document.getElementById('a-dividend').value)||0,
+      dividendPerShare:dps,
+      annualDividend:dps&&qty?dps*qty:(Number(document.getElementById('a-dividend').value)||0),
       value:curPrice*qty||Number(document.getElementById('a-stock-val-display').value)||0,
       cost:buyPrice*qty};
   }else if(type==='bond'){
@@ -1778,14 +1816,18 @@ function saveAsset(){
   if(id){const idx=data.assets.findIndex(a=>a.id===id);data.assets[idx]={...data.assets[idx],...obj};}
   else data.assets.push({id:uid(),...obj});
   save();closeAssetModal();showToast('✅ 자산 저장 완료');
-  renderPage(document.querySelector('.page.active').id.replace('page-',''));
+  const cur=document.querySelector('.page.active')?.id?.replace('page-','');
+  renderDashboard();
+  if(cur&&cur!=='dashboard')renderPage(cur);
 }
 
 function deleteAsset(id){
   if(!confirm('이 자산을 삭제하시겠습니까?'))return;
   data.assets=data.assets.filter(a=>a.id!==id);
   save();showToast('🗑️ 삭제 완료');
-  renderPage(document.querySelector('.page.active').id.replace('page-',''));
+  const cur=document.querySelector('.page.active')?.id?.replace('page-','');
+  renderDashboard();
+  if(cur&&cur!=='dashboard')renderPage(cur);
 }
 
 // ═══════════════════════════════════════════
