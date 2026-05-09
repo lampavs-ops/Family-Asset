@@ -437,10 +437,21 @@
   </div>
   <div class="member-grid" id="member-grid"></div>
   <div class="card">
-    <div class="card-title">📄 구성원별 자산 상세</div>
-    <div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;">
-      <select class="form-select" style="width:180px" id="member-filter" onchange="renderMemberAssets()"><option value="all">전체 구성원</option></select>
-      <button class="btn btn-ghost btn-sm" onclick="openAssetModal()">+ 자산 추가</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="card-title" style="margin:0">📄 구성원별 자산 상세</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="form-select" style="width:140px;font-size:12px" id="member-filter" onchange="renderMemberAssets()"><option value="all">전체 구성원</option></select>
+        <select class="form-select" id="member-asset-sort" onchange="renderMemberAssets()" style="padding:4px 8px;font-size:12px;width:auto">
+          <option value="default">기본</option>
+          <option value="value-desc">금액 높은순</option>
+          <option value="value-asc">금액 낮은순</option>
+          <option value="name-asc">이름 오름차순</option>
+          <option value="name-desc">이름 내림차순</option>
+          <option value="gain-desc">손익 높은순</option>
+          <option value="gain-asc">손익 낮은순</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="openAssetModal()">+ 자산 추가</button>
+      </div>
     </div>
     <table><thead><tr><th>자산명</th><th>구성원</th><th>유형</th><th>평가금액</th><th>손익</th><th>비고</th><th>관리</th></tr></thead>
     <tbody id="member-assets-body"></tbody></table>
@@ -1120,15 +1131,28 @@ function renderMembers(){
 
 function renderMemberAssets(){
   const f=document.getElementById('member-filter').value;
-  const list=f==='all'?data.assets:data.assets.filter(a=>a.memberId===f);
+  let list=f==='all'?[...data.assets]:data.assets.filter(a=>a.memberId===f);
+
+  // 정렬
+  const sk=(document.getElementById('member-asset-sort')||{value:'default'}).value;
+  if(sk==='value-desc') list.sort((a,b)=>b.value-a.value);
+  else if(sk==='value-asc') list.sort((a,b)=>a.value-b.value);
+  else if(sk==='name-asc') list.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  else if(sk==='name-desc') list.sort((a,b)=>b.name.localeCompare(a.name,'ko'));
+  else if(sk==='gain-desc') list.sort((a,b)=>(b.value-b.cost)-(a.value-a.cost));
+  else if(sk==='gain-asc') list.sort((a,b)=>(a.value-a.cost)-(b.value-b.cost));
+
   const tbody=document.getElementById('member-assets-body');
   if(!list.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:28px">자산이 없습니다</td></tr>';return;}
   tbody.innerHTML=list.map(a=>{
     const m=data.members.find(m=>m.id===a.memberId);
-    const at=ASSET_TYPES[a.type];
+    const at=ASSET_TYPES[a.type]||ASSET_TYPES.other;
     const gain=Number(a.value)-Number(a.cost||0);
+    const detail=(a.type==='stock'||a.type==='reit')&&a.ticker
+      ?`<div style="font-size:11px;color:var(--text3)">${a.ticker} | ${a.qty}주</div>`
+      :a.bondCode?`<div style="font-size:11px;color:var(--text3)">${a.bondCode}</div>`:'';
     return`<tr>
-      <td><div style="font-weight:600">${a.name}</div>${a.ticker?`<div style="font-size:11px;color:var(--text3)">${a.ticker}</div>`:''}${a.bondCode?`<div style="font-size:11px;color:var(--text3)">${a.bondCode}</div>`:''}</td>
+      <td><div style="font-weight:600">${a.name}</div>${detail}</td>
       <td>${m?m.icon+' '+m.name:'-'}</td>
       <td><span class="tag" style="background:${at.color}22;color:${at.color}">${at.icon} ${at.label}</span></td>
       <td class="mono">${won(a.value)}</td>
@@ -1136,7 +1160,7 @@ function renderMemberAssets(){
       <td style="color:var(--text3);font-size:12px">${a.note||'-'}</td>
       <td><div style="display:flex;gap:5px">
         <button class="btn btn-ghost btn-sm" onclick="openAssetModal('${a.id}')">✏️</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteAsset('${a.id}')">🗑️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteMemberAsset('${a.id}')">🗑️</button>
       </div></td>
     </tr>`;
   }).join('');
@@ -1891,18 +1915,31 @@ function saveAsset(){
   if(id){const idx=data.assets.findIndex(a=>a.id===id);data.assets[idx]={...data.assets[idx],...obj};}
   else data.assets.push({id:uid(),...obj});
   save();closeAssetModal();showToast('✅ 자산 저장 완료');
-  const cur=document.querySelector('.page.active')?.id?.replace('page-','');
-  renderDashboard();
-  if(cur&&cur!=='dashboard')renderPage(cur);
+  refreshAllAssetViews();
+}
+
+function deleteMemberAsset(id){
+  if(!confirm('이 자산을 삭제하시겠습니까?'))return;
+  data.assets=data.assets.filter(a=>a.id!==id);
+  save();showToast('🗑️ 삭제 완료');
+  refreshAllAssetViews();
 }
 
 function deleteAsset(id){
   if(!confirm('이 자산을 삭제하시겠습니까?'))return;
   data.assets=data.assets.filter(a=>a.id!==id);
   save();showToast('🗑️ 삭제 완료');
-  const cur=document.querySelector('.page.active')?.id?.replace('page-','');
+  refreshAllAssetViews();
+}
+
+// 자산 변경 시 모든 관련 뷰 즉시 갱신
+function refreshAllAssetViews(){
   renderDashboard();
-  if(cur&&cur!=='dashboard')renderPage(cur);
+  const cur=document.querySelector('.page.active')?.id?.replace('page-','');
+  if(cur==='members'){renderMembers();}
+  else if(cur==='assets'){renderAssets();}
+  else if(cur==='price'){renderPricePage();}
+  else if(cur==='income'){renderIncome();}
 }
 
 // ═══════════════════════════════════════════
