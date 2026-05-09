@@ -1914,32 +1914,35 @@ function saveAsset(){
 
   if(id){const idx=data.assets.findIndex(a=>a.id===id);data.assets[idx]={...data.assets[idx],...obj};}
   else data.assets.push({id:uid(),...obj});
-  save();showToast('✅ 자산 저장 완료');
-  setTimeout(()=>location.reload(),600);
+  save();
+  closeAssetModal();
+  showToast('✅ 자산 저장 완료');
+  refreshAllAssetViews();
 }
 
-function deleteMemberAsset(id){
+function deleteMemberAsset(aid){
   if(!confirm('이 자산을 삭제하시겠습니까?'))return;
-  data.assets=data.assets.filter(a=>a.id!==id);
+  data.assets=data.assets.filter(a=>a.id!==aid);
   save();showToast('🗑️ 삭제 완료');
-  setTimeout(()=>location.reload(),600);
+  refreshAllAssetViews();
 }
 
-function deleteAsset(id){
+function deleteAsset(aid){
   if(!confirm('이 자산을 삭제하시겠습니까?'))return;
-  data.assets=data.assets.filter(a=>a.id!==id);
+  data.assets=data.assets.filter(a=>a.id!==aid);
   save();showToast('🗑️ 삭제 완료');
-  setTimeout(()=>location.reload(),600);
+  refreshAllAssetViews();
 }
 
-// 자산 변경 시 모든 관련 뷰 즉시 갱신
+// 자산 변경 시 현재 페이지 + 대시보드 즉시 갱신
 function refreshAllAssetViews(){
-  renderDashboard();
   const cur=document.querySelector('.page.active')?.id?.replace('page-','');
-  if(cur==='members'){renderMembers();}
-  else if(cur==='assets'){renderAssets();}
-  else if(cur==='price'){renderPricePage();}
-  else if(cur==='income'){renderIncome();}
+  renderDashboard();
+  if(cur==='members')renderMembers();
+  else if(cur==='assets')renderAssets();
+  else if(cur==='price')renderPricePage();
+  else if(cur==='income')renderIncome();
+  else if(cur==='debt')renderDebt();
 }
 
 // ═══════════════════════════════════════════
