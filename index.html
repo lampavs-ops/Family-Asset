@@ -147,6 +147,12 @@
   .info-box code{background:var(--surface3);padding:1px 6px;border-radius:4px;font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);}
   .warn-box{background:rgba(212,106,106,.08);border:1px solid rgba(212,106,106,.25);border-radius:var(--radius-sm);padding:12px 16px;font-size:13px;color:var(--red);margin-bottom:16px;}
 
+  /* 정렬 가능한 테이블 헤더 */
+  th[onclick]{transition:color .15s;}
+  th[onclick]:hover{color:var(--accent);}
+  .sort-asc::after{content:' ▲';font-size:10px;color:var(--accent);}
+  .sort-desc::after{content:' ▼';font-size:10px;color:var(--accent);}
+
   .page{display:none;}
   .page.active{display:block;}
 
@@ -370,8 +376,8 @@
     <div class="nav-item" onclick="showPage('price')"><span class="icon">🔄</span><span>가격 업데이트</span></div>
     <div class="nav-item" onclick="showPage('debt')"><span class="icon">🏦</span><span>부채 관리</span></div>
     <div class="nav-item" onclick="showPage('income')"><span class="icon">📋</span><span>소득 관리</span></div>
-    <div class="nav-item" onclick="showPage('goals')"><span class="icon">🎯</span><span>재무 목표</span></div>
     <div class="nav-item" onclick="showPage('trend')"><span class="icon">📈</span><span>월간 추이</span></div>
+    <div class="nav-item" onclick="showPage('goals')"><span class="icon">🎯</span><span>재무 목표</span></div>
   </nav>
   <!-- Google Drive 연동 -->
   <div class="gdrive-section">
@@ -441,19 +447,18 @@
       <div class="card-title" style="margin:0">📄 구성원별 자산 상세</div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <select class="form-select" style="width:140px;font-size:12px" id="member-filter" onchange="renderMemberAssets()"><option value="all">전체 구성원</option></select>
-        <select class="form-select" id="member-asset-sort" onchange="renderMemberAssets()" style="padding:4px 8px;font-size:12px;width:auto">
-          <option value="default">기본</option>
-          <option value="value-desc">금액 높은순</option>
-          <option value="value-asc">금액 낮은순</option>
-          <option value="name-asc">이름 오름차순</option>
-          <option value="name-desc">이름 내림차순</option>
-          <option value="gain-desc">손익 높은순</option>
-          <option value="gain-asc">손익 낮은순</option>
-        </select>
         <button class="btn btn-ghost btn-sm" onclick="openAssetModal()">+ 자산 추가</button>
       </div>
     </div>
-    <table><thead><tr><th>자산명</th><th>구성원</th><th>유형</th><th>평가금액</th><th>손익</th><th>비고</th><th>관리</th></tr></thead>
+    <table><thead><tr id="member-assets-header">
+      <th onclick="sortMemberAssets('name')" style="cursor:pointer;user-select:none">자산명 <span id="ms-name"></span></th>
+      <th onclick="sortMemberAssets('member')" style="cursor:pointer;user-select:none">구성원 <span id="ms-member"></span></th>
+      <th onclick="sortMemberAssets('type')" style="cursor:pointer;user-select:none">유형 <span id="ms-type"></span></th>
+      <th onclick="sortMemberAssets('value')" style="cursor:pointer;user-select:none">평가금액 <span id="ms-value"></span></th>
+      <th onclick="sortMemberAssets('gain')" style="cursor:pointer;user-select:none">손익 <span id="ms-gain"></span></th>
+      <th>비고</th>
+      <th>관리</th>
+    </tr></thead>
     <tbody id="member-assets-body"></tbody></table>
   </div>
 </div>
@@ -474,21 +479,17 @@
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div class="card-title" style="margin:0">💼 전체 자산 목록</div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <span style="font-size:12px;color:var(--text3)">정렬:</span>
-        <select class="form-select" id="asset-sort" onchange="renderAssets()" style="padding:4px 8px;font-size:12px;width:auto">
-          <option value="default">기본</option>
-          <option value="value-desc">금액 높은순</option>
-          <option value="value-asc">금액 낮은순</option>
-          <option value="name-asc">이름 오름차순</option>
-          <option value="name-desc">이름 내림차순</option>
-          <option value="gain-desc">손익 높은순</option>
-          <option value="gain-asc">손익 낮은순</option>
-          <option value="income-desc">이자·배당 높은순</option>
-        </select>
-      </div>
     </div>
-    <table><thead><tr><th>자산명</th><th>구성원</th><th>유형</th><th>평가금액</th><th>취득금액</th><th>손익</th><th>이자·배당 소득</th><th>관리</th></tr></thead>
+    <table><thead><tr>
+      <th onclick="sortAllAssets('name')" style="cursor:pointer;user-select:none">자산명 <span id="as-name"></span></th>
+      <th onclick="sortAllAssets('member')" style="cursor:pointer;user-select:none">구성원 <span id="as-member"></span></th>
+      <th onclick="sortAllAssets('type')" style="cursor:pointer;user-select:none">유형 <span id="as-type"></span></th>
+      <th onclick="sortAllAssets('value')" style="cursor:pointer;user-select:none">평가금액 <span id="as-value"></span></th>
+      <th onclick="sortAllAssets('cost')" style="cursor:pointer;user-select:none">취득금액 <span id="as-cost"></span></th>
+      <th onclick="sortAllAssets('gain')" style="cursor:pointer;user-select:none">손익 <span id="as-gain"></span></th>
+      <th onclick="sortAllAssets('income')" style="cursor:pointer;user-select:none">이자·배당 소득 <span id="as-income"></span></th>
+      <th>관리</th>
+    </tr></thead>
     <tbody id="all-assets-body"></tbody></table>
   </div>
 </div>
@@ -572,6 +573,32 @@
   <div id="income-sections"></div>
 </div>
 
+<!-- TREND -->
+<div class="page" id="page-trend">
+  <div class="page-header">
+    <div><h2>월간 추이</h2><p>자산 변화 추이를 시각적으로 확인합니다</p></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="openSnapshotModal()">✍️ 수기 입력</button>
+      <button class="btn" onclick="saveMonthlySnapshot()">📸 이번달 저장</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">📈 순자산 월간 변화</div>
+    <div style="height:280px"><canvas id="trendLineChart"></canvas></div>
+    <div class="chart-legend" id="trend-legend"></div>
+  </div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="card-title" style="margin:0">📋 월간 스냅샷 기록</div>
+      <span style="font-size:11px;color:var(--text3)">📸 자동저장 &nbsp;✍️ 수기입력</span>
+    </div>
+    <table><thead><tr>
+      <th>날짜</th><th>총 자산</th><th>금융자산</th><th>부동산</th><th>부채</th><th>순자산</th><th>전월대비</th><th>관리</th>
+    </tr></thead>
+    <tbody id="snapshot-body"></tbody></table>
+  </div>
+</div>
+
 <!-- GOALS -->
 <div class="page" id="page-goals">
   <div class="page-header">
@@ -587,28 +614,53 @@
   <div id="goals-list"></div>
 </div>
 
-<!-- TREND -->
-<div class="page" id="page-trend">
-  <div class="page-header">
-    <div><h2>월간 추이</h2><p>자산 변화 추이를 시각적으로 확인합니다</p></div>
-    <button class="btn" onclick="saveMonthlySnapshot()">📸 스냅샷 저장</button>
-  </div>
-  <div class="card" style="margin-bottom:20px;">
-    <div class="card-title">📈 순자산 월간 변화</div>
-    <div style="height:280px"><canvas id="trendLineChart"></canvas></div>
-    <div class="chart-legend" id="trend-legend"></div>
-  </div>
-  <div class="card">
-    <div class="card-title">📋 월간 스냅샷 기록</div>
-    <table><thead><tr><th>날짜</th><th>총 자산</th><th>금융자산</th><th>부동산</th><th>기타</th><th>전월대비</th></tr></thead>
-    <tbody id="snapshot-body"></tbody></table>
-  </div>
-</div>
-
 </main>
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- SNAPSHOT MANUAL MODAL -->
+<div class="modal-overlay" id="snapshotModal">
+  <div class="modal">
+    <div class="modal-title" id="snapshotModalTitle">✍️ 과거 데이터 수기 입력</div>
+    <input type="hidden" id="snap-edit-date">
+    <div class="form-group">
+      <label class="form-label">연월 (YYYY.MM)</label>
+      <input class="form-input" id="snap-date" placeholder="예: 2024.01" maxlength="7">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">총 자산 (원)</label>
+        <input class="form-input" id="snap-total" type="number" placeholder="0" oninput="calcSnapNetWorth()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">금융자산 (원)</label>
+        <input class="form-input" id="snap-financial" type="number" placeholder="0">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">부동산 (원)</label>
+        <input class="form-input" id="snap-realestate" type="number" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">부채 (원)</label>
+        <input class="form-input" id="snap-debt" type="number" placeholder="0" oninput="calcSnapNetWorth()">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">순자산 (자동계산)</label>
+      <input class="form-input" id="snap-networth" type="number" readonly style="color:var(--gold);opacity:.9" placeholder="총자산 − 부채">
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:16px">
+      💡 총 자산과 부채를 입력하면 순자산이 자동계산됩니다. 금융자산 + 부동산이 총자산을 초과하면 기타로 처리됩니다.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeSnapshotModal()">취소</button>
+      <button class="btn" onclick="saveManualSnapshot()">저장</button>
+    </div>
+  </div>
+</div>
 
 <!-- GOOGLE DRIVE CONFIG MODAL -->
 <div class="gdrive-config-overlay" id="gdriveConfigModal">
@@ -872,6 +924,10 @@
     <div class="form-group"><label class="form-label">색상</label>
       <select class="form-select" id="g-color"><option value="var(--green)">초록</option><option value="var(--blue)">파랑</option><option value="var(--gold)">금색</option><option value="var(--purple)">보라</option><option value="var(--red)">빨강</option></select>
     </div>
+    <div class="form-group">
+      <label class="form-label">비고 (목표 관련 구체적인 내용)</label>
+      <textarea class="form-input" id="g-note" rows="3" placeholder="예: 강남구 아파트 매입, 전세 만기 2027년 3월, 현재 청약저축 월 50만원 납입 중..." style="resize:vertical;min-height:70px;font-family:inherit;line-height:1.6"></textarea>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeGoalModal()">취소</button>
       <button class="btn" onclick="saveGoal()">저장</button>
@@ -947,6 +1003,7 @@ const INCOME_TYPES = {
 const charts = {};
 const uid  = () => Math.random().toString(36).substr(2,9);
 const won  = n => '₩'+Number(n||0).toLocaleString('ko-KR');
+const wonM = n => { const m=Math.round(Number(n||0)/10000)/100; return '₩'+m.toLocaleString('ko-KR',{maximumFractionDigits:1})+'백만'; };
 const pct  = (v,t) => t>0?Math.round(v/t*100):0;
 
 // ═══════════════════════════════════════════
@@ -1019,8 +1076,55 @@ function showToast(msg,ms=2800){
   setTimeout(()=>t.classList.remove('show'),ms);
 }
 
-// ═══════════════════════════════════════════
-// ROUTING
+// ── 테이블 컬럼 클릭 정렬 상태 ────────────────
+const sortState={
+  member:{col:'default', dir:1},  // dir: 1=내림차순, -1=오름차순
+  assets:{col:'default', dir:1}
+};
+
+const SORT_ICONS={member:{},assets:{}};
+
+function sortMemberAssets(col){
+  if(sortState.member.col===col){
+    sortState.member.dir*=-1; // 토글
+  }else{
+    sortState.member.col=col;
+    sortState.member.dir=1; // 첫 클릭은 내림차순
+  }
+  renderMemberAssets();
+}
+
+function sortAllAssets(col){
+  if(sortState.assets.col===col){
+    sortState.assets.dir*=-1;
+  }else{
+    sortState.assets.col=col;
+    sortState.assets.dir=1;
+  }
+  renderAssets();
+}
+
+function updateSortIcons(prefix, col, dir){
+  ['name','member','type','value','cost','gain','income'].forEach(c=>{
+    const el=document.getElementById(`${prefix}-${c}`);
+    if(el){el.className=c===col?(dir===1?'sort-desc':'sort-asc'):'';}
+  });
+}
+
+function applySort(list, col, dir, getMemberName){
+  const d=dir;
+  const getTypeLabel=a=>(ASSET_TYPES[a.type]||ASSET_TYPES.other).label;
+  switch(col){
+    case 'name':   return list.sort((a,b)=>d*b.name.localeCompare(a.name,'ko'));
+    case 'member': return list.sort((a,b)=>d*getMemberName(b).localeCompare(getMemberName(a),'ko'));
+    case 'type':   return list.sort((a,b)=>d*getTypeLabel(b).localeCompare(getTypeLabel(a),'ko'));
+    case 'value':  return list.sort((a,b)=>d*(b.value-a.value));
+    case 'cost':   return list.sort((a,b)=>d*(Number(b.cost||0)-Number(a.cost||0)));
+    case 'gain':   return list.sort((a,b)=>d*((b.value-Number(b.cost||0))-(a.value-Number(a.cost||0))));
+    case 'income': return list.sort((a,b)=>d*(annualReturn(b)-annualReturn(a)));
+    default:       return list;
+  }
+}
 // ═══════════════════════════════════════════
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -1060,12 +1164,12 @@ function renderDashboard(){
   const debt=totalDebts();
   const netWorth=total-debt;
   const fin=data.assets.filter(a=>isFinancial(a.type)).reduce((s,a)=>s+Number(a.value),0);
-  document.getElementById('total-net-worth').textContent=won(netWorth);
-  document.getElementById('net-worth-sub').textContent=`자산 ${won(total)} − 부채 ${won(debt)}`;
-  document.getElementById('total-financial').textContent=won(fin);
-  document.getElementById('total-real-estate').textContent=won(totalByType('real_estate'));
-  document.getElementById('total-debt-dash').textContent=won(debt);
-  document.getElementById('total-income').textContent=won(
+  document.getElementById('total-net-worth').textContent=wonM(netWorth);
+  document.getElementById('net-worth-sub').textContent=`자산 ${wonM(total)} − 부채 ${wonM(debt)}`;
+  document.getElementById('total-financial').textContent=wonM(fin);
+  document.getElementById('total-real-estate').textContent=wonM(totalByType('real_estate'));
+  document.getElementById('total-debt-dash').textContent=wonM(debt);
+  document.getElementById('total-income').textContent=wonM(
     data.incomes.reduce((s,i)=>s+Number(i.amount),0)+assetDividendIncome()+assetSeparateIncome()
   );
 
@@ -1145,13 +1249,10 @@ function renderMemberAssets(){
   let list=f==='all'?[...data.assets]:data.assets.filter(a=>a.memberId===f);
 
   // 정렬
-  const sk=(document.getElementById('member-asset-sort')||{value:'default'}).value;
-  if(sk==='value-desc') list.sort((a,b)=>b.value-a.value);
-  else if(sk==='value-asc') list.sort((a,b)=>a.value-b.value);
-  else if(sk==='name-asc') list.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-  else if(sk==='name-desc') list.sort((a,b)=>b.name.localeCompare(a.name,'ko'));
-  else if(sk==='gain-desc') list.sort((a,b)=>(b.value-b.cost)-(a.value-a.cost));
-  else if(sk==='gain-asc') list.sort((a,b)=>(a.value-a.cost)-(b.value-b.cost));
+  const getMemberName=a=>{const m=data.members.find(m=>m.id===a.memberId);return m?m.name:'';};
+  const {col,dir}=sortState.member;
+  applySort(list, col, dir, getMemberName);
+  updateSortIcons('ms', col, dir);
 
   const tbody=document.getElementById('member-assets-body');
   if(!list.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:28px">자산이 없습니다</td></tr>';return;}
@@ -1209,15 +1310,11 @@ function renderAssets(){
   }).join('');
 
   // 3번: 정렬
-  const sortKey=(document.getElementById('asset-sort')||{value:'default'}).value;
   let sortedAssets=[...data.assets];
-  if(sortKey==='value-desc') sortedAssets.sort((a,b)=>b.value-a.value);
-  else if(sortKey==='value-asc') sortedAssets.sort((a,b)=>a.value-b.value);
-  else if(sortKey==='name-asc') sortedAssets.sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-  else if(sortKey==='name-desc') sortedAssets.sort((a,b)=>b.name.localeCompare(a.name,'ko'));
-  else if(sortKey==='gain-desc') sortedAssets.sort((a,b)=>(b.value-b.cost)-(a.value-a.cost));
-  else if(sortKey==='gain-asc') sortedAssets.sort((a,b)=>(a.value-a.cost)-(b.value-b.cost));
-  else if(sortKey==='income-desc') sortedAssets.sort((a,b)=>annualReturn(b)-annualReturn(a));
+  const getMName=a=>{const m=data.members.find(m=>m.id===a.memberId);return m?m.name:'';};
+  const {col:acol, dir:adir}=sortState.assets;
+  applySort(sortedAssets, acol, adir, getMName);
+  updateSortIcons('as', acol, adir);
 
   document.getElementById('all-assets-body').innerHTML=!data.assets.length
     ?'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:28px">자산을 추가해 주세요</td></tr>'
@@ -1341,39 +1438,101 @@ function getRecentBizDates(n=5){
   return dates;
 }
 async function fetchKrStockPrice(code,apiKey){
-  const baseUrl=`https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo`;
-
-  // API가 srtnCd 파라미터를 필터로 쓰지 않고 전체 반환함 → 응답에서 직접 매칭
-  async function fetchAndMatch(url, code){
-    const res=await fetch(url,{signal:AbortSignal.timeout(10000)});
-    if(!res.ok)return null;
-    const json=await res.json();
-    const totalCount=json?.response?.body?.totalCount||0;
-    const items=json?.response?.body?.items?.item;
-    if(!items)return null;
-    const list=Array.isArray(items)?items:[items];
-    // srtnCd 정확 매칭
-    const matched=list.find(i=>i.srtnCd&&i.srtnCd.trim()===code.trim());
-    if(matched?.clpr){
-      const price=Math.round(Number(String(matched.clpr).replace(/,/g,'')));
-      console.log(`[성공] ${code} → ${price}원 (${matched.basDt})`);
-      if(price>0)return{price,date:matched.basDt||''};
+  // ── 1차: 네이버 금융 모바일 API (allorigins 프록시) ──────────
+  try{
+    const naverUrl=`https://m.stock.naver.com/api/stock/${code}/basic`;
+    const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(naverUrl)}`;
+    const res=await fetch(proxy,{signal:AbortSignal.timeout(8000)});
+    if(res.ok){
+      const outer=await res.json();
+      const json=JSON.parse(outer.contents||'{}');
+      // 네이버 응답: closePrice 또는 currentPrice
+      const raw=json?.closePrice||json?.currentPrice||json?.dealPrice;
+      if(raw){
+        const price=Math.round(Number(String(raw).replace(/,/g,'')));
+        if(price>100){
+          console.log(`[네이버] ${code} → ${price}원`);
+          return{price, date:'naver'};
+        }
+      }
     }
-    console.log(`[미매칭] ${code} - 응답 종목들:`, list.slice(0,3).map(i=>i.srtnCd).join(','));
-    return null;
-  }
+  }catch(e){console.info(`[네이버실패] ${code}:`,e.message);}
 
-  const dates=getRecentBizDates(5);
-  for(const basDt of dates){
-    try{
-      // numOfRows를 충분히 크게 해서 해당 날짜 전체 데이터에서 검색
-      const url=`${baseUrl}?serviceKey=${apiKey}&numOfRows=5000&pageNo=1&resultType=json&basDt=${basDt}`;
-      console.log(`[조회] ${code} / ${basDt}`);
-      const result=await fetchAndMatch(url, code);
-      if(result)return result;
-    }catch(e){console.info(`[실패] ${code} ${basDt}:`,e.message);}
+  // ── 2차: 카카오 주식 API ─────────────────────────────────────
+  try{
+    const kakaoUrl=`https://api2.finance.daum.net/api/search/quotes?q=${code}`;
+    const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(kakaoUrl)}`;
+    const res=await fetch(proxy,{signal:AbortSignal.timeout(8000)});
+    if(res.ok){
+      const outer=await res.json();
+      const json=JSON.parse(outer.contents||'{}');
+      const raw=json?.data?.[0]?.tradePrice||json?.data?.[0]?.closePrice;
+      if(raw){
+        const price=Math.round(Number(raw));
+        if(price>100){
+          console.log(`[카카오] ${code} → ${price}원`);
+          return{price, date:'kakao'};
+        }
+      }
+    }
+  }catch(e){console.info(`[카카오실패] ${code}:`,e.message);}
+
+  // ── 3차: Yahoo Finance (.KS/.KQ) ────────────────────────────
+  const ySuffix='.KS'; // 코스닥은 .KQ지만 .KS도 대부분 동작
+  const yTicker=`${code}${ySuffix}`;
+  try{
+    const yUrl=`https://query1.finance.yahoo.com/v8/finance/chart/${yTicker}?interval=1d&range=5d`;
+    const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`;
+    const res=await fetch(proxy,{signal:AbortSignal.timeout(10000)});
+    if(res.ok){
+      const outer=await res.json();
+      const json=JSON.parse(outer.contents||'{}');
+      const meta=json?.chart?.result?.[0]?.meta;
+      const price=meta?.regularMarketPrice||meta?.previousClose||meta?.chartPreviousClose;
+      if(price&&price>100){
+        console.log(`[Yahoo] ${yTicker} → ${price}원`);
+        return{price:Math.round(price), date:'yahoo'};
+      }
+    }
+  }catch(e){console.info(`[Yahoo실패] ${yTicker}:`,e.message);}
+
+  // ── 4차: 공공데이터 전체 페이지 순회 (마지막 수단) ──────────
+  if(apiKey){
+    const baseUrl=`https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo`;
+    const dates=getRecentBizDates(3);
+    for(const basDt of dates){
+      try{
+        // 총 건수 먼저 파악
+        const countUrl=`${baseUrl}?serviceKey=${apiKey}&numOfRows=1&pageNo=1&resultType=json&basDt=${basDt}`;
+        const cr=await fetch(countUrl,{signal:AbortSignal.timeout(8000)});
+        if(!cr.ok)continue;
+        const cj=await cr.json();
+        const total=Number(cj?.response?.body?.totalCount||0);
+        if(!total)continue;
+        // 페이지 순회 (최대 20페이지 × 100건)
+        const perPage=100;
+        const maxPages=Math.min(Math.ceil(total/perPage),20);
+        for(let page=1;page<=maxPages;page++){
+          const url=`${baseUrl}?serviceKey=${apiKey}&numOfRows=${perPage}&pageNo=${page}&resultType=json&basDt=${basDt}`;
+          const res=await fetch(url,{signal:AbortSignal.timeout(10000)});
+          if(!res.ok)break;
+          const json=await res.json();
+          const items=json?.response?.body?.items?.item;
+          if(!items)break;
+          const list=Array.isArray(items)?items:[items];
+          const matched=list.find(i=>i.srtnCd&&i.srtnCd.trim()===code.trim());
+          if(matched?.clpr){
+            const price=Math.round(Number(String(matched.clpr).replace(/,/g,'')));
+            if(price>100){
+              console.log(`[공공] ${code} → ${price}원 (${basDt} p${page})`);
+              return{price,date:basDt};
+            }
+          }
+        }
+      }catch(e){console.info(`[공공실패] ${code} ${basDt}:`,e.message);}
+    }
   }
-  throw new Error('종가 조회 실패');
+  throw new Error('모든 소스 조회 실패');
 }
 async function fetchUsStockPrice(ticker){
   const t=ticker.trim().toUpperCase();
@@ -1700,10 +1859,27 @@ function renderIncome(){
         <td><button class="btn btn-ghost btn-sm" onclick="openAssetModal('${i.id}')">✏️</button></td></tr>`;
     })];
     return`<div class="card" style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div class="card-title" style="margin:0">${g.label}</div>
-        <span class="mono" style="color:${g.color}">${won(total)}</span>
+        <span class="mono" style="color:${g.color};font-size:18px">${won(total)}</span>
       </div>
+      <!-- 구성원별 합계 -->
+      ${(()=>{
+        const memberTotals=data.members.map(m=>{
+          const fromIncome=items.filter(i=>i.memberId===m.id).reduce((s,i)=>s+Number(i.amount),0);
+          const fromAssets=g.extraItems.filter(i=>i.memberId===m.id).reduce((s,i)=>s+i.amount,0);
+          return{m, total:fromIncome+fromAssets};
+        }).filter(x=>x.total>0);
+        if(!memberTotals.length) return '';
+        return`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--surface2);border-radius:8px">
+          <span style="font-size:11px;color:var(--text3);margin-right:4px;align-self:center">구성원별:</span>
+          ${memberTotals.map(({m,total})=>`
+            <span style="font-size:12px;display:flex;align-items:center;gap:4px">
+              <span>${m.icon} ${m.name}</span>
+              <span class="mono" style="color:${g.color}">${won(total)}</span>
+            </span>`).join('<span style="color:var(--border)">│</span>')}
+        </div>`;
+      })()}
       ${!allRows.length?'<p style="color:var(--text3);font-size:13px;text-align:center;padding:16px 0">소득 항목 없음</p>'
       :`<table><thead><tr><th>항목</th><th>구분</th><th>구성원</th><th>연간금액</th><th>비고</th><th>관리</th></tr></thead>
         <tbody>${allRows.join('')}</tbody></table>`}
@@ -1749,6 +1925,7 @@ function renderGoals(){
           &nbsp;|&nbsp; 잔여 <strong>${won(remain)}</strong>
           ${monthly?`&nbsp;|&nbsp; 월 <strong>${won(monthly)}</strong> 적립 필요 (${months}개월)`:''}
         </div>
+        ${g.note?`<div style="margin-top:10px;padding:8px 12px;background:var(--surface);border-left:3px solid ${g.color};border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);line-height:1.7;white-space:pre-wrap">${g.note}</div>`:''}
       </div>`;
     }).join('');
 }
@@ -1758,29 +1935,51 @@ function renderGoals(){
 // ═══════════════════════════════════════════
 function renderTrend(){
   const snaps=data.snapshots;
-  if(!snaps.length){document.getElementById('snapshot-body').innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">스냅샷이 없습니다</td></tr>';return;}
+  if(!snaps.length){
+    document.getElementById('snapshot-body').innerHTML=
+      '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">스냅샷이 없습니다<br><small>이번달 저장 또는 수기 입력으로 추가하세요</small></td></tr>';
+    return;
+  }
+
+  // 차트 — 순자산 추가
   const ctx=document.getElementById('trendLineChart');
   if(charts.trendLine)charts.trendLine.destroy();
   charts.trendLine=new Chart(ctx,{type:'line',data:{labels:snaps.map(s=>s.date),datasets:[
-    {label:'총 자산',  data:snaps.map(s=>s.total),     borderColor:'#d4af6a',backgroundColor:'rgba(212,175,106,.08)',tension:.4,fill:true,pointRadius:4,pointBackgroundColor:'#d4af6a'},
-    {label:'부동산',   data:snaps.map(s=>s.realEstate),borderColor:'#6abf8a',backgroundColor:'transparent',tension:.4,borderDash:[4,4],pointRadius:3,pointBackgroundColor:'#6abf8a'},
-    {label:'금융자산', data:snaps.map(s=>s.financial), borderColor:'#7b9de0',backgroundColor:'transparent',tension:.4,borderDash:[4,4],pointRadius:3,pointBackgroundColor:'#7b9de0'}
+    {label:'순자산',   data:snaps.map(s=>(s.netWorth!==undefined?s.netWorth:s.total-(s.debt||0))),borderColor:'#d4af6a',backgroundColor:'rgba(212,175,106,.08)',tension:.4,fill:true,pointRadius:4,pointBackgroundColor:'#d4af6a'},
+    {label:'총 자산', data:snaps.map(s=>s.total),     borderColor:'#9b9de0',backgroundColor:'transparent',tension:.4,borderDash:[4,4],pointRadius:3,pointBackgroundColor:'#9b9de0'},
+    {label:'금융자산',data:snaps.map(s=>s.financial), borderColor:'#7b9de0',backgroundColor:'transparent',tension:.4,borderDash:[2,4],pointRadius:3,pointBackgroundColor:'#7b9de0'},
+    {label:'부동산',  data:snaps.map(s=>s.realEstate),borderColor:'#6abf8a',backgroundColor:'transparent',tension:.4,borderDash:[2,4],pointRadius:3,pointBackgroundColor:'#6abf8a'},
   ]},options:{responsive:true,maintainAspectRatio:false,
     plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${won(c.parsed.y)}`}}},
     scales:{x:{ticks:{color:'#5a5855'},grid:{color:'#2e3140'}},
             y:{ticks:{color:'#5a5855',callback:v=>'₩'+Math.round(v/1e8)+'억'},grid:{color:'#2e3140'}}}}});
 
   document.getElementById('trend-legend').innerHTML=[
-    {color:'#d4af6a',label:'총 자산'},{color:'#6abf8a',label:'부동산'},{color:'#7b9de0',label:'금융자산'}
+    {color:'#d4af6a',label:'순자산'},{color:'#9b9de0',label:'총 자산'},
+    {color:'#7b9de0',label:'금융자산'},{color:'#6abf8a',label:'부동산'}
   ].map(l=>`<div class="legend-item"><div class="legend-dot" style="background:${l.color}"></div>${l.label}</div>`).join('');
 
-  document.getElementById('snapshot-body').innerHTML=[...snaps].reverse().map((s,i,arr)=>{
-    const prev=arr[i+1];const diff=prev?s.total-prev.total:0;
-    return`<tr><td>${s.date}</td><td class="mono">${won(s.total)}</td>
-      <td class="mono" style="color:var(--green)">${won(s.financial)}</td>
-      <td class="mono" style="color:var(--gold)">${won(s.realEstate)}</td>
-      <td class="mono" style="color:var(--text3)">${won(s.other)}</td>
-      <td class="mono" style="color:${diff>0?'var(--green)':diff<0?'var(--red)':'var(--text3)'}">${prev?(diff>0?'+':'')+won(diff):'-'}</td></tr>`;
+  const reversed=[...snaps].reverse();
+  document.getElementById('snapshot-body').innerHTML=reversed.map((s,i)=>{
+    const prev=reversed[i+1];
+    const netWorth=s.netWorth!==undefined?s.netWorth:s.total-(s.debt||0);
+    const prevNet=prev?(prev.netWorth!==undefined?prev.netWorth:prev.total-(prev.debt||0)):null;
+    const diff=prevNet!==null?netWorth-prevNet:0;
+    const typeIcon=s.manual?'✍️':'📸';
+    const typeColor=s.manual?'var(--gold)':'var(--text3)';
+    return`<tr>
+      <td><span title="${s.manual?'수기입력':'자동저장'}" style="color:${typeColor};margin-right:4px">${typeIcon}</span><strong>${s.date}</strong></td>
+      <td class="mono">${won(s.total)}</td>
+      <td class="mono" style="color:var(--blue)">${won(s.financial)}</td>
+      <td class="mono" style="color:var(--green)">${won(s.realEstate)}</td>
+      <td class="mono" style="color:var(--red)">${s.debt?won(s.debt):'-'}</td>
+      <td class="mono" style="color:var(--gold);font-weight:600">${won(netWorth)}</td>
+      <td class="mono" style="color:${diff>0?'var(--green)':diff<0?'var(--red)':'var(--text3)'}">${prevNet!==null?(diff>0?'+':'')+won(diff):'-'}</td>
+      <td><div style="display:flex;gap:5px">
+        <button class="btn btn-ghost btn-sm" onclick="openSnapshotModal('${s.date}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSnapshot('${s.date}')">🗑️</button>
+      </div></td>
+    </tr>`;
   }).join('');
 }
 
@@ -1789,12 +1988,77 @@ function saveMonthlySnapshot(){
   const label=`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}`;
   data.snapshots=data.snapshots.filter(s=>s.date!==label);
   const total=totalAssets();
+  const debt=totalDebts();
   const re=totalByType('real_estate');
   const fin=data.assets.filter(a=>isFinancial(a.type)).reduce((s,a)=>s+Number(a.value),0);
-  data.snapshots.push({date:label,total,realEstate:re,financial:fin,other:Math.max(total-re-fin,0)});
+  const netWorth=total-debt;
+  data.snapshots.push({date:label,total,realEstate:re,financial:fin,debt,netWorth,other:Math.max(total-re-fin,0),manual:false});
   data.snapshots.sort((a,b)=>a.date.localeCompare(b.date));
-  save();showToast('📸 스냅샷 저장 완료!');
+  save();showToast('📸 이번달 스냅샷 저장 완료!');
   if(document.getElementById('page-trend').classList.contains('active'))renderTrend();
+}
+
+// ── 수기 입력 ────────────────────────────────
+function openSnapshotModal(date){
+  document.getElementById('snapshotModal').classList.add('open');
+  ['snap-total','snap-financial','snap-realestate','snap-debt','snap-networth']
+    .forEach(id=>{document.getElementById(id).value='';});
+
+  if(date){
+    const s=data.snapshots.find(s=>s.date===date);
+    if(!s)return;
+    document.getElementById('snapshotModalTitle').textContent='✍️ 스냅샷 수정';
+    document.getElementById('snap-edit-date').value=date;
+    document.getElementById('snap-date').value=date;
+    document.getElementById('snap-date').readOnly=true;
+    document.getElementById('snap-total').value=s.total||'';
+    document.getElementById('snap-financial').value=s.financial||'';
+    document.getElementById('snap-realestate').value=s.realEstate||'';
+    document.getElementById('snap-debt').value=s.debt||'';
+    document.getElementById('snap-networth').value=s.netWorth!==undefined?s.netWorth:(s.total-(s.debt||0))||'';
+  }else{
+    document.getElementById('snapshotModalTitle').textContent='✍️ 과거 데이터 수기 입력';
+    document.getElementById('snap-edit-date').value='';
+    document.getElementById('snap-date').readOnly=false;
+  }
+}
+
+function closeSnapshotModal(){
+  document.getElementById('snapshotModal').classList.remove('open');
+}
+
+function calcSnapNetWorth(){
+  const total=Number(document.getElementById('snap-total').value)||0;
+  const debt=Number(document.getElementById('snap-debt').value)||0;
+  if(total){document.getElementById('snap-networth').value=total-debt;}
+}
+
+function saveManualSnapshot(){
+  const date=document.getElementById('snap-date').value.trim();
+  const total=Number(document.getElementById('snap-total').value)||0;
+  const financial=Number(document.getElementById('snap-financial').value)||0;
+  const realEstate=Number(document.getElementById('snap-realestate').value)||0;
+  const debt=Number(document.getElementById('snap-debt').value)||0;
+
+  // 날짜 형식 검증
+  if(!/^\d{4}\.\d{2}$/.test(date)){showToast('⚠️ 날짜 형식을 YYYY.MM으로 입력해주세요');return;}
+  if(!total){showToast('⚠️ 총 자산을 입력해주세요');return;}
+
+  const netWorth=total-debt;
+  const other=Math.max(total-financial-realEstate,0);
+
+  data.snapshots=data.snapshots.filter(s=>s.date!==date);
+  data.snapshots.push({date,total,financial,realEstate,debt,netWorth,other,manual:true});
+  data.snapshots.sort((a,b)=>a.date.localeCompare(b.date));
+  save();closeSnapshotModal();
+  showToast('✍️ 수기 데이터 저장 완료!');
+  renderTrend();
+}
+
+function deleteSnapshot(date){
+  if(!confirm(`${date} 스냅샷을 삭제하시겠습니까?`))return;
+  data.snapshots=data.snapshots.filter(s=>s.date!==date);
+  save();showToast('🗑️ 삭제 완료');renderTrend();
 }
 
 // ═══════════════════════════════════════════
@@ -2049,10 +2313,11 @@ function openGoalModal(id){
     document.getElementById('g-deadline').value=g.deadline||'';
     document.getElementById('g-icon').value=g.icon;
     document.getElementById('g-color').value=g.color;
+    document.getElementById('g-note').value=g.note||'';
   }else{
     document.getElementById('goalModalTitle').textContent='재무 목표 추가';
     document.getElementById('editGoalId').value='';
-    ['g-name','g-target','g-current','g-deadline'].forEach(f=>document.getElementById(f).value='');
+    ['g-name','g-target','g-current','g-deadline','g-note'].forEach(f=>document.getElementById(f).value='');
     document.getElementById('g-icon').value='🏠';
     document.getElementById('g-color').value='var(--green)';
   }
@@ -2065,7 +2330,9 @@ function saveGoal(){
   const id=document.getElementById('editGoalId').value;
   const obj={name,target,current:Number(document.getElementById('g-current').value)||0,
     deadline:document.getElementById('g-deadline').value,
-    icon:document.getElementById('g-icon').value,color:document.getElementById('g-color').value};
+    icon:document.getElementById('g-icon').value,
+    color:document.getElementById('g-color').value,
+    note:document.getElementById('g-note').value.trim()};
   if(id){const idx=data.goals.findIndex(g=>g.id===id);data.goals[idx]={...data.goals[idx],...obj};}
   else data.goals.push({id:uid(),...obj});
   save();closeGoalModal();showToast('✅ 목표 저장 완료');renderGoals();
