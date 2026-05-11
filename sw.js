@@ -1,6 +1,6 @@
 // 가정 자산 관리 — Service Worker
 // ⚠️ CACHE_NAME 버전을 올리면 모든 캐시가 갱신됩니다
-const CACHE_NAME = 'fam-asset-v5';
+const CACHE_NAME = 'fam-asset-v6';
 
 // 오프라인 캐시할 정적 리소스 (index.html 제외)
 const PRECACHE = [
@@ -39,7 +39,8 @@ self.addEventListener('fetch', event => {
   const networkOnlyHosts = [
     'apis.google.com','accounts.google.com','googleapis.com',
     'query1.finance.yahoo.com','api.allorigins.win',
-    'api.krx.co.kr','data.krx.co.kr','www.kofia.or.kr'
+    'api.krx.co.kr','data.krx.co.kr','www.kofia.or.kr',
+    'apis.data.go.kr'
   ];
   if (networkOnlyHosts.some(d => url.hostname.includes(d))) return;
 
