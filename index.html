@@ -522,10 +522,11 @@
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div class="card-title" style="margin:0;">📄 채권 현재가</div>
-      <div style="display:flex;align-items:center;gap:12px;">
+      <div class="card-title" style="margin:0;">📄 채권 장부가 · 경과이자</div>
+      <div style="display:flex;align-items:center;gap:8px;">
         <span class="last-update" id="bond-last-update"></span>
-        <button class="btn btn-sm btn-blue" onclick="updateBondPrices()">🔄 채권 업데이트</button>
+        <button class="btn btn-ghost btn-sm" onclick="openBondBulkModal()">📋 일괄 등록</button>
+        <button class="btn btn-sm btn-blue" onclick="updateBondAccrued()">🔄 경과이자 갱신</button>
       </div>
     </div>
     <div id="bond-price-list"><div class="empty-state"><p>채권 자산을 추가하면 여기에 표시됩니다</p></div></div>
@@ -826,43 +827,40 @@
         <div class="modal-section-title">📄 채권 상세 정보</div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">종목코드 (ISIN)</label>
-            <input class="form-input" id="a-bond-code" placeholder="예: KR1030012D82">
+            <label class="form-label">만기일</label>
+            <input class="form-input" id="a-maturity" type="date" oninput="calcBondFields()">
           </div>
           <div class="form-group">
-            <label class="form-label">만기일</label>
-            <input class="form-input" id="a-maturity" type="date">
+            <label class="form-label">표면이자율 (%)</label>
+            <input class="form-input" id="a-coupon-rate" type="number" step="0.01" placeholder="1.36" oninput="calcBondFields()">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">액면금액 (원)</label>
-            <input class="form-input" id="a-face-value" type="number" placeholder="0" oninput="calcBondFields()">
+            <input class="form-input" id="a-face-value" type="number" placeholder="20300000" oninput="calcBondFields()">
           </div>
           <div class="form-group">
-            <label class="form-label">표면이자율 (%)</label>
-            <input class="form-input" id="a-coupon-rate" type="number" step="0.01" placeholder="3.50" oninput="calcBondFields()">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">매입가 (원)</label>
+            <label class="form-label">매입가격 (원)</label>
             <input class="form-input" id="a-bond-buy" type="number" placeholder="0">
           </div>
-          <div class="form-group">
-            <label class="form-label">현재가 (원)</label>
-            <input class="form-input" id="a-bond-cur" type="number" placeholder="0" oninput="calcBondFields()">
-          </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">연간 예상 이자액 (원, 자동계산)</label>
-            <input class="form-input" id="a-bond-interest" type="number" placeholder="액면 × 이자율" style="color:var(--gold);opacity:.9">
+            <label class="form-label">매입일</label>
+            <input class="form-input" id="a-bond-buy-date" type="date">
           </div>
           <div class="form-group">
-            <label class="form-label">평가금액 = 현재가</label>
-            <input class="form-input" id="a-bond-val-display" type="number" readonly style="color:var(--gold);opacity:.9" placeholder="현재가와 동일">
+            <label class="form-label">예금환산금리 (%)</label>
+            <input class="form-input" id="a-bond-equiv-rate" type="number" step="0.01" placeholder="예: 3.85">
           </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">연간 예상이자 (자동계산)</label>
+          <input class="form-input" id="a-bond-interest" type="number" readonly style="color:var(--gold);opacity:.9" placeholder="액면금액 × 표면이자율">
+        </div>
+        <div style="font-size:11.5px;color:var(--text3);margin-top:6px;line-height:1.7">
+          💡 평가금액 = 매입가격 (장부가 기준)
         </div>
       </div>
     </div>
@@ -871,6 +869,31 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeAssetModal()">취소</button>
       <button class="btn" onclick="saveAsset()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- BOND BULK IMPORT MODAL -->
+<div class="modal-overlay" id="bondBulkModal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-title">📋 채권 일괄 등록</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.8">
+      아래 형식으로 붙여넣기 하세요. 탭 또는 쉼표로 구분, 한 줄에 하나의 채권.<br>
+      <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:11px">종목명 | 액면금액 | 매입가격 | 표면금리(%) | 만기일 | 매입일(선택) | 예금환산금리%(선택)</code>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">
+      구성원: <select class="form-select" id="bulk-bond-member" style="width:160px;font-size:12px;display:inline-block"></select>
+    </div>
+    <textarea class="form-input" id="bulk-bond-text" rows="8" style="font-family:'DM Mono',monospace;font-size:12px;resize:vertical"
+      placeholder="서울특별시채권2020-4	20300000	20000000	1.36	2027/7/23
+현대커머셜354	8823000	9962490	2.94	2029/5/31	2024/03/15	3.85
+서울도시철도22-05	5404000	5188400	1	2027/9/6
+우리금융조건부3-1	3125000	3062500	2.13	2029/7/30"></textarea>
+    <div id="bulk-bond-preview" style="margin-top:12px;font-size:12px;color:var(--text3)"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeBondBulkModal()">취소</button>
+      <button class="btn btn-ghost" onclick="previewBondBulk()">미리보기</button>
+      <button class="btn" onclick="saveBondBulk()">일괄 등록</button>
     </div>
   </div>
 </div>
@@ -1383,22 +1406,20 @@ function renderPricePage(){
   bel.innerHTML=!bonds.length
     ?'<div class="empty-state"><p>채권 자산을 추가하면 여기에 표시됩니다</p></div>'
     :`<table><thead><tr>
-        <th>채권명</th><th>종목코드(ISIN)</th><th>만기일</th><th>액면가</th>
-        <th>표면이율</th><th>매입가</th><th>현재가</th><th>평가손익</th><th>연이자</th><th>상태</th>
+        <th>채권명</th><th>만기일</th><th>액면금액</th>
+        <th>표면이율</th><th>매입가(장부가)</th><th>매입일</th><th>예금환산금리</th><th>연간이자</th><th>상태</th>
       </tr></thead><tbody>
       ${bonds.map(a=>{
-        const gain=Number(a.bondCur||a.value)-Number(a.bondBuy||a.cost||0);
         return`<tr id="br-${a.id}">
           <td style="font-weight:600">${a.name}</td>
-          <td><span class="price-ticker">${a.bondCode||'미설정'}</span></td>
           <td class="mono">${a.maturity||'-'}</td>
           <td class="mono">${won(a.faceValue)}</td>
           <td class="mono">${a.couponRate||0}%</td>
-          <td class="mono">${won(a.bondBuy)}</td>
-          <td class="mono" id="bp-${a.id}">${won(a.bondCur||a.value)}</td>
-          <td class="mono" style="color:${gain>=0?'var(--green)':'var(--red)'}">${gain>=0?'+':''}${won(gain)}</td>
+          <td class="mono" id="bp-${a.id}">${won(a.bondBuy||a.value)}</td>
+          <td class="mono" style="color:var(--text3)">${a.buyDate||'-'}</td>
+          <td class="mono" style="color:var(--blue)">${a.equivRate?a.equivRate+'%':'-'}</td>
           <td class="mono" style="color:var(--gold)">${won(a.annualInterest)}</td>
-          <td><span class="price-status manual" id="bs-${a.id}">수동</span></td>
+          <td><span class="price-status manual" id="bs-${a.id}">장부가</span></td>
         </tr>`;
       }).join('')}</tbody></table>`;
 }
@@ -1613,7 +1634,109 @@ async function updateStockPrices(){
 // shinhansec.com은 CORS 차단 + 로그인 세션 필요로 브라우저에서 직접 호출 불가.
 // 대신 한국거래소(KRX) 채권 시세 공개 API와 KOFIA 프록시를 순차 시도합니다.
 
-// ── 채권: 공공데이터포털 금융위원회_채권시세정보 API ─────────
+// 경과이자 계산 헬퍼
+function calcAccruedInterest(annualInterest){
+  const today=new Date();
+  const startOfYear=new Date(today.getFullYear(),0,1);
+  const elapsed=Math.floor((today-startOfYear)/(1000*60*60*24));
+  return Math.round(annualInterest*(elapsed/365));
+}
+
+// 채권 경과이자 갱신 (외부 API 없이 순수 계산)
+function updateBondAccrued(){
+  const bonds=data.assets.filter(a=>a.type==='bond');
+  if(!bonds.length){showToast('⚠️ 등록된 채권이 없습니다');return;}
+  let updated=0;
+  bonds.forEach(a=>{
+    if(!a.annualInterest)return;
+    a.accruedInterest=calcAccruedInterest(a.annualInterest);
+    // 장부가는 매입가격 그대로 유지
+    a.value=a.bondBuy||a.cost||a.value;
+    updated++;
+    const bp=document.getElementById('bp-'+a.id);
+    if(bp)bp.textContent=won(a.value);
+    const bai=document.getElementById('bai-'+a.id);
+    if(bai)bai.textContent=won(a.accruedInterest);
+    const bs=document.getElementById('bs-'+a.id);
+    if(bs){bs.textContent='갱신완료 ✓';bs.className='price-status ok';}
+  });
+  save();
+  const t=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+  const lu=document.getElementById('bond-last-update');if(lu)lu.textContent=`최종: ${t}`;
+  showToast(`✅ 채권 경과이자 갱신 완료 (${updated}건)`);
+  refreshAllAssetViews();
+}
+
+// updateBondPrices는 updateBondAccrued로 대체
+const updateBondPrices=updateBondAccrued;
+
+// ── 채권 일괄 등록 ──────────────────────────
+function openBondBulkModal(){
+  document.getElementById('bulk-bond-member').innerHTML=
+    data.members.map(m=>`<option value="${m.id}">${m.icon} ${m.name}</option>`).join('');
+  document.getElementById('bulk-bond-text').value='';
+  document.getElementById('bulk-bond-preview').innerHTML='';
+  document.getElementById('bondBulkModal').classList.add('open');
+}
+function closeBondBulkModal(){document.getElementById('bondBulkModal').classList.remove('open');}
+
+function parseBondBulkText(text){
+  const lines=text.trim().split('\n').filter(l=>l.trim());
+  return lines.map(line=>{
+    const cols=line.split(/\t|,|\|/).map(c=>c.trim().replace(/,/g,''));
+    if(cols.length<5)return null;
+    const name=cols[0];
+    const faceValue=Number(cols[1])||0;
+    const bondBuy=Number(cols[2])||0;
+    const couponRate=parseFloat(cols[3].replace(/%/g,''))||0;
+    const maturity=cols[4].trim().replace(/\//g,'-');
+    // 선택: 매입일(cols[5]), 예금환산금리(cols[6])
+    const buyDate=cols[5]?cols[5].trim().replace(/\//g,'-'):'';
+    const equivRate=cols[6]?parseFloat(cols[6].replace(/%/g,''))||0:0;
+    if(!name||!faceValue||!bondBuy||!couponRate||!maturity)return null;
+    const annualInterest=Math.round(faceValue*(couponRate/100));
+    return{name,faceValue,bondBuy,couponRate,maturity,buyDate,equivRate,annualInterest};
+  }).filter(Boolean);
+}
+
+function previewBondBulk(){
+  const text=document.getElementById('bulk-bond-text').value;
+  const items=parseBondBulkText(text);
+  const preview=document.getElementById('bulk-bond-preview');
+  if(!items.length){preview.innerHTML='<span style="color:var(--red)">파싱 실패 — 형식을 확인해주세요</span>';return;}
+  preview.innerHTML=`<div style="color:var(--green);margin-bottom:6px">✅ ${items.length}건 인식됨</div>`
+    +items.map(i=>`<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:11.5px">
+      <strong>${i.name}</strong> | 액면 ${won(i.faceValue)} | 매입 ${won(i.bondBuy)} | ${i.couponRate}% | 만기 ${i.maturity}
+      ${i.buyDate?`| 매입일 ${i.buyDate}`:''}${i.equivRate?`| 예금환산 ${i.equivRate}%`:''}
+      | 연이자 ${won(i.annualInterest)}
+    </div>`).join('');
+}
+
+function saveBondBulk(){
+  const text=document.getElementById('bulk-bond-text').value;
+  const items=parseBondBulkText(text);
+  if(!items.length){showToast('⚠️ 파싱 실패 — 미리보기를 먼저 확인해주세요');return;}
+  const memberId=document.getElementById('bulk-bond-member').value;
+  items.forEach(i=>{
+    data.assets.push({
+      id:uid(),type:'bond',memberId,
+      name:i.name,
+      faceValue:i.faceValue,
+      bondBuy:i.bondBuy,
+      couponRate:i.couponRate,
+      maturity:i.maturity,
+      buyDate:i.buyDate||'',
+      equivRate:i.equivRate||0,
+      annualInterest:i.annualInterest,
+      value:i.bondBuy,
+      cost:i.bondBuy,
+      note:''
+    });
+  });
+  save();closeBondBulkModal();
+  showToast(`✅ 채권 ${items.length}건 일괄 등록 완료!`);
+  refreshAllAssetViews();
+}
 async function fetchBondPriceGov(isin, apiKey){
   const baseUrl=`https://apis.data.go.kr/1160100/service/GetBondSecuritiesInfoService/getBondPriceInfo`;
   const dates=getRecentBizDates(7);
@@ -1641,55 +1764,10 @@ async function fetchBondPriceGov(isin, apiKey){
   throw new Error('채권 종가 조회 실패');
 }
 
-async function updateBondPrices(){
-  const apiKey=gdCfg.stockApiKey||'';
-  const bonds=data.assets.filter(a=>a.type==='bond'&&a.bondCode);
-  if(!bonds.length){showToast('⚠️ ISIN 코드가 등록된 채권이 없습니다');return;}
-  if(!apiKey){showToast('⚠️ ⚙️ 설정에서 공공데이터 인증키를 먼저 입력해주세요');return;}
-
-  bonds.forEach(a=>{
-    const el=document.getElementById('bs-'+a.id);
-    if(el){el.className='price-status loading';el.innerHTML='<span class="spin">⟳</span> 조회중';}
-  });
-
-  let ok=0,fail=0;
-  for(const a of bonds){
-    try{
-      const {price, yield:yld, date}=await fetchBondPriceGov(a.bondCode, apiKey);
-      const d=date;
-      const dateLabel=`종가(${d.slice(0,4)}.${d.slice(4,6)}.${d.slice(6,8)})`;
-
-      // 채권 가격: 100 미만이면 액면가 대비 % → 원화 환산
-      if(price>0 && price<200 && a.faceValue){
-        a.bondCur=Math.round(a.faceValue*(price/100));
-      }else{
-        a.bondCur=Math.round(price);
-      }
-      a.value=a.bondCur;
-      if(yld!==null)a.currentYield=yld; // 현재 수익률 저장
-
-      const bp=document.getElementById('bp-'+a.id);if(bp)bp.textContent=won(a.bondCur);
-      const by=document.getElementById('by-'+a.id);if(by)by.textContent=yld?`수익률 ${yld}%`:'';
-      const bs=document.getElementById('bs-'+a.id);
-      if(bs){bs.textContent=dateLabel+' ✓';bs.className='price-status ok';}
-      ok++;
-    }catch(e){
-      const bs=document.getElementById('bs-'+a.id);
-      if(bs){bs.textContent='조회실패';bs.className='price-status err';}
-      console.warn('Bond fail:',a.bondCode,e.message);fail++;
-    }
-  }
-  save();
-  const t=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-  const lu=document.getElementById('bond-last-update');if(lu)lu.textContent=`최종: ${t}`;
-  showToast(`✅ 채권 업데이트 완료 (성공 ${ok}건${fail?` / 실패 ${fail}건`:''})`);
-  refreshAllAssetViews();
-}
-
 async function updateAllPrices(){
   showToast('🔄 전체 가격 업데이트 시작...');
   await updateStockPrices();
-  await updateBondPrices();
+  updateBondAccrued();
 }
 
 // ═══════════════════════════════════════════
@@ -2086,8 +2164,6 @@ function calcBondFields(){
   const face=Number(document.getElementById('a-face-value').value)||0;
   const rate=Number(document.getElementById('a-coupon-rate').value)||0;
   if(face&&rate)document.getElementById('a-bond-interest').value=Math.round(face*(rate/100));
-  const cur=Number(document.getElementById('a-bond-cur').value)||0;
-  if(cur)document.getElementById('a-bond-val-display').value=cur;
 }
 
 // ═══════════════════════════════════════════
@@ -2136,8 +2212,8 @@ function openAssetModal(id){
   // reset
   ['a-name','a-value','a-cost','a-note','a-ticker','a-qty','a-buy-price','a-cur-price',
    'a-dividend-per-share','a-dividend','a-stock-val-display',
-   'a-bond-code','a-maturity','a-face-value','a-coupon-rate',
-   'a-bond-buy','a-bond-cur','a-bond-interest','a-bond-val-display'
+   'a-maturity','a-face-value','a-coupon-rate',
+   'a-bond-buy','a-bond-buy-date','a-bond-equiv-rate','a-bond-interest'
   ].forEach(fid=>{const el=document.getElementById(fid);if(el)el.value='';});
   const sepCb=document.getElementById('a-dividend-separate');
   if(sepCb)sepCb.checked=false;
@@ -2162,14 +2238,14 @@ function openAssetModal(id){
       document.getElementById('a-stock-val-display').value=a.value||'';
       if(sepCb)sepCb.checked=!!a.dividendSeparate;
     }else if(a.type==='bond'){
-      document.getElementById('a-bond-code').value=a.bondCode||'';
       document.getElementById('a-maturity').value=a.maturity||'';
       document.getElementById('a-face-value').value=a.faceValue||'';
       document.getElementById('a-coupon-rate').value=a.couponRate||'';
-      document.getElementById('a-bond-buy').value=a.bondBuy||'';
-      document.getElementById('a-bond-cur').value=a.bondCur||'';
+      document.getElementById('a-bond-buy').value=a.bondBuy||a.cost||'';
+      document.getElementById('a-bond-buy-date').value=a.buyDate||'';
+      document.getElementById('a-bond-equiv-rate').value=a.equivRate||'';
       document.getElementById('a-bond-interest').value=a.annualInterest||'';
-      document.getElementById('a-bond-val-display').value=a.value||'';
+      calcBondFields();
     }else{
       document.getElementById('a-value').value=a.value||'';
       document.getElementById('a-cost').value=a.cost||'';
@@ -2205,14 +2281,16 @@ function saveAsset(){
   }else if(type==='bond'){
     const faceValue=Number(document.getElementById('a-face-value').value)||0;
     const couponRate=Number(document.getElementById('a-coupon-rate').value)||0;
-    const bondCur=Number(document.getElementById('a-bond-cur').value)||0;
     const bondBuy=Number(document.getElementById('a-bond-buy').value)||0;
-    const calcInterest=Math.round(faceValue*(couponRate/100));
-    obj={...obj,bondCode:document.getElementById('a-bond-code').value.trim(),
+    const annualInterest=Number(document.getElementById('a-bond-interest').value)||Math.round(faceValue*(couponRate/100));
+    obj={...obj,
       maturity:document.getElementById('a-maturity').value,
-      faceValue,couponRate,bondBuy,bondCur,
-      annualInterest:Number(document.getElementById('a-bond-interest').value)||calcInterest,
-      value:bondCur||bondBuy,cost:bondBuy};
+      buyDate:document.getElementById('a-bond-buy-date').value,
+      equivRate:Number(document.getElementById('a-bond-equiv-rate').value)||0,
+      faceValue,couponRate,bondBuy,
+      annualInterest,
+      value:bondBuy,
+      cost:bondBuy};
   }else{
     obj.value=Number(document.getElementById('a-value').value)||0;
     obj.cost =Number(document.getElementById('a-cost').value)||0;

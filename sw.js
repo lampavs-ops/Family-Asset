@@ -1,6 +1,6 @@
 // 가정 자산 관리 — Service Worker
 // ⚠️ CACHE_NAME 버전을 올리면 모든 캐시가 갱신됩니다
-const CACHE_NAME = 'fam-asset-v7';
+const CACHE_NAME = 'fam-asset-v9';
 
 // 오프라인 캐시할 정적 리소스 (index.html 제외)
 const PRECACHE = [
