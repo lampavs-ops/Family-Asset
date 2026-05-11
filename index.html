@@ -505,7 +505,7 @@
     📡 <strong>가격 데이터 안내</strong><br>
     · <strong>한국 주식/리츠</strong>: 공공데이터포털 금융위원회 주식시세 API 사용. 종목코드는 숫자 6자리만 입력 (예: <code>005930</code>)<br>
     · <strong>미국 주식</strong>: Yahoo Finance API 사용. 영문 ticker 입력 (예: <code>AAPL</code>, <code>TSLA</code>)<br>
-    · <strong>채권</strong>: ISIN 코드 12자리 입력 (예: <code>KR1030012D82</code>). 조회 실패 시 직접 수정<br>
+    · <strong>채권</strong>: 공공데이터포털 금융위원회 채권시세정보 API 사용. ISIN 코드 12자리 입력 (예: <code>KR1030012D82</code>). 종가 및 수익률 자동 조회<br>
     · 종가 기준으로 조회되며 최근 5 영업일 내 데이터를 자동으로 가져옵니다
   </div>
 
@@ -1613,84 +1613,78 @@ async function updateStockPrices(){
 // shinhansec.com은 CORS 차단 + 로그인 세션 필요로 브라우저에서 직접 호출 불가.
 // 대신 한국거래소(KRX) 채권 시세 공개 API와 KOFIA 프록시를 순차 시도합니다.
 
-async function fetchBondPriceKRX(isin){
-  // KRX 채권 현재가 조회 API
-  const today=new Date().toISOString().slice(0,10).replace(/-/g,'');
-  const url=`https://api.krx.co.kr/contents/COM/GenerateOTP.jspx?bld=dbms/MDC/STAT/standard/MDCSTAT09001&name=form`;
-  // KRX는 OTP 토큰 방식이라 직접 단일 호출 불가 → allorigins 프록시로 우회 시도
-  const targetUrl=`https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd?bld=dbms/MDC/STAT/standard/MDCSTAT09001&isuCd=${isin}&strtDd=${today}&endDd=${today}&csvxls_isNo=false`;
-  const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-  const res=await fetch(proxy,{signal:AbortSignal.timeout(8000)});
-  const json=await res.json();
-  const inner=json?.contents?JSON.parse(json.contents):null;
-  // KRX 응답 구조: {OutBlock_1:[{CLSPRC_YD:"99.50",...}]}
-  const row=inner?.OutBlock_1?.[0];
-  const price=row?.CLSPRC_YD||row?.CLSPRC;
-  if(!price) throw new Error('KRX 가격 없음');
-  return parseFloat(price.replace(/,/g,''));
-}
+// ── 채권: 공공데이터포털 금융위원회_채권시세정보 API ─────────
+async function fetchBondPriceGov(isin, apiKey){
+  const baseUrl=`https://apis.data.go.kr/1160100/service/GetBondSecuritiesInfoService/getBondPriceInfo`;
+  const dates=getRecentBizDates(7);
 
-async function fetchBondPriceKOFIA(isin){
-  const today=new Date().toISOString().slice(0,10).replace(/-/g,'');
-  const targetUrl=`https://www.kofia.or.kr/bbs/P65/bbs/P65.do?menuNo=200218&mode=DATA&startDt=${today}&endDt=${today}&isincd=${isin}`;
-  const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-  const res=await fetch(proxy,{signal:AbortSignal.timeout(8000)});
-  const json=await res.json();
-  const inner=json?.contents?JSON.parse(json.contents):null;
-  const price=inner?.bondPricList?.[0]?.closePrice||inner?.result?.[0]?.clsprc;
-  if(!price) throw new Error('KOFIA 가격 없음');
-  return parseFloat(String(price).replace(/,/g,''));
+  for(const basDt of dates){
+    try{
+      // ISIN으로 직접 조회 (채권은 ISIN 필터가 실제로 작동함)
+      const url=`${baseUrl}?serviceKey=${apiKey}&numOfRows=10&pageNo=1&resultType=json&basDt=${basDt}&isinCd=${isin}`;
+      console.log(`[채권조회] ${isin} / ${basDt}`);
+      const res=await fetch(url,{signal:AbortSignal.timeout(8000)});
+      if(!res.ok)continue;
+      const json=await res.json();
+      const items=json?.response?.body?.items?.item;
+      if(!items)continue;
+      const list=Array.isArray(items)?items:[items];
+      // ISIN 매칭
+      const matched=list.find(i=>i.isinCd&&i.isinCd.trim()===isin.trim())||list[0];
+      if(matched?.clpr){
+        const price=parseFloat(String(matched.clpr).replace(/,/g,''));
+        const yld=matched.yrYld?parseFloat(matched.yrYld):null; // 수익률
+        console.log(`[채권성공] ${isin} → 종가:${price}, 수익률:${yld}%, (${basDt})`);
+        if(price>0)return{price, yield:yld, date:basDt};
+      }
+    }catch(e){console.info(`[채권실패] ${isin} ${basDt}:`,e.message);}
+  }
+  throw new Error('채권 종가 조회 실패');
 }
 
 async function updateBondPrices(){
+  const apiKey=gdCfg.stockApiKey||'';
   const bonds=data.assets.filter(a=>a.type==='bond'&&a.bondCode);
-  if(!bonds.length){showToast('⚠️ 종목코드가 등록된 채권이 없습니다');return;}
+  if(!bonds.length){showToast('⚠️ ISIN 코드가 등록된 채권이 없습니다');return;}
+  if(!apiKey){showToast('⚠️ ⚙️ 설정에서 공공데이터 인증키를 먼저 입력해주세요');return;}
 
   bonds.forEach(a=>{
     const el=document.getElementById('bs-'+a.id);
-    if(el){el.className='price-status loading';el.innerHTML='<span class="spin">⟳</span>';}
+    if(el){el.className='price-status loading';el.innerHTML='<span class="spin">⟳</span> 조회중';}
   });
 
   let ok=0,fail=0;
   for(const a of bonds){
-    let price=null,source='';
     try{
-      // 1차: KRX
-      try{ price=await fetchBondPriceKRX(a.bondCode); source='KRX'; }
-      catch(e){ console.info('KRX fallback:',e.message); }
-      // 2차: KOFIA
-      if(!price){
-        price=await fetchBondPriceKOFIA(a.bondCode);
-        source='KOFIA';
-      }
-      if(!price) throw new Error('모든 소스 실패');
+      const {price, yield:yld, date}=await fetchBondPriceGov(a.bondCode, apiKey);
+      const d=date;
+      const dateLabel=`종가(${d.slice(0,4)}.${d.slice(4,6)}.${d.slice(6,8)})`;
 
-      // 채권 가격은 액면 대비 % 또는 원화 절대값일 수 있음
-      // 100 미만이면 액면가 대비 %로 해석 → 원화로 환산
+      // 채권 가격: 100 미만이면 액면가 대비 % → 원화 환산
       if(price>0 && price<200 && a.faceValue){
-        // 호가 단위가 퍼센트 기준인 경우 (예: 99.50 → 99.50% of 액면가)
-        const absPrice=Math.round(a.faceValue*(price/100));
-        a.bondCur=absPrice;
-      } else {
+        a.bondCur=Math.round(a.faceValue*(price/100));
+      }else{
         a.bondCur=Math.round(price);
       }
       a.value=a.bondCur;
+      if(yld!==null)a.currentYield=yld; // 현재 수익률 저장
 
       const bp=document.getElementById('bp-'+a.id);if(bp)bp.textContent=won(a.bondCur);
+      const by=document.getElementById('by-'+a.id);if(by)by.textContent=yld?`수익률 ${yld}%`:'';
       const bs=document.getElementById('bs-'+a.id);
-      if(bs){bs.textContent=`${source} ✓`;bs.className='price-status ok';}
+      if(bs){bs.textContent=dateLabel+' ✓';bs.className='price-status ok';}
       ok++;
     }catch(e){
       const bs=document.getElementById('bs-'+a.id);
-      if(bs){bs.textContent='수동입력필요';bs.className='price-status err';}
+      if(bs){bs.textContent='조회실패';bs.className='price-status err';}
       console.warn('Bond fail:',a.bondCode,e.message);fail++;
     }
   }
   save();
   const t=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
   const lu=document.getElementById('bond-last-update');if(lu)lu.textContent=`최종: ${t}`;
-  if(fail>0)showToast(`⚠️ 채권 ${ok}건 성공, ${fail}건은 수동입력이 필요합니다`,4000);
-  else showToast(`✅ 채권 ${ok}건 완료`);
+  showToast(`✅ 채권 업데이트 완료 (성공 ${ok}건${fail?` / 실패 ${fail}건`:''})`);
+  refreshAllAssetViews();
 }
 
 async function updateAllPrices(){
