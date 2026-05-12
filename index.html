@@ -1459,101 +1459,44 @@ function getRecentBizDates(n=5){
   return dates;
 }
 async function fetchKrStockPrice(code,apiKey){
-  // ── 1차: 네이버 금융 모바일 API (allorigins 프록시) ──────────
-  try{
-    const naverUrl=`https://m.stock.naver.com/api/stock/${code}/basic`;
-    const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(naverUrl)}`;
-    const res=await fetch(proxy,{signal:AbortSignal.timeout(8000)});
-    if(res.ok){
-      const outer=await res.json();
-      const json=JSON.parse(outer.contents||'{}');
-      // 네이버 응답: closePrice 또는 currentPrice
-      const raw=json?.closePrice||json?.currentPrice||json?.dealPrice;
-      if(raw){
-        const price=Math.round(Number(String(raw).replace(/,/g,'')));
-        if(price>100){
-          console.log(`[네이버] ${code} → ${price}원`);
-          return{price, date:'naver'};
+  const baseUrl=`https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo`;
+  const dates=getRecentBizDates(5);
+
+  for(const basDt of dates){
+    try{
+      // likeSrtnCd: 단축코드 부분일치 → 해당 종목만 반환됨 (srtnCd는 필터 안됨)
+      const url=`${baseUrl}?serviceKey=${apiKey}&numOfRows=5&pageNo=1&resultType=json`
+        +`&basDt=${basDt}&likeSrtnCd=${code}`;
+      console.log(`[주식조회] ${code} / ${basDt}`);
+      const res=await fetch(url,{signal:AbortSignal.timeout(8000)});
+      if(!res.ok)continue;
+      const json=await res.json();
+
+      const resultCode=json?.response?.header?.resultCode;
+      if(resultCode&&resultCode!=='00'){
+        console.info(`[API오류] ${code}: ${json?.response?.header?.resultMsg}`);
+        continue;
+      }
+
+      const items=json?.response?.body?.items?.item;
+      if(!items)continue;
+      const list=Array.isArray(items)?items:[items];
+
+      // 정확 매칭 우선, 없으면 첫 번째 항목
+      const matched=list.find(i=>i.srtnCd&&i.srtnCd.trim()===code.trim())||list[0];
+
+      if(matched?.clpr){
+        const price=Math.round(Number(String(matched.clpr).replace(/,/g,'')));
+        if(price>0){
+          const d=basDt;
+          const dateLabel=`${d.slice(0,4)}.${d.slice(4,6)}.${d.slice(6,8)}`;
+          console.log(`[주식성공] ${code}(${matched.itmsNm||''}) → ${price}원 (${dateLabel})`);
+          return{price, date:basDt, name:matched.itmsNm};
         }
       }
-    }
-  }catch(e){console.info(`[네이버실패] ${code}:`,e.message);}
-
-  // ── 2차: 카카오 주식 API ─────────────────────────────────────
-  try{
-    const kakaoUrl=`https://api2.finance.daum.net/api/search/quotes?q=${code}`;
-    const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(kakaoUrl)}`;
-    const res=await fetch(proxy,{signal:AbortSignal.timeout(8000)});
-    if(res.ok){
-      const outer=await res.json();
-      const json=JSON.parse(outer.contents||'{}');
-      const raw=json?.data?.[0]?.tradePrice||json?.data?.[0]?.closePrice;
-      if(raw){
-        const price=Math.round(Number(raw));
-        if(price>100){
-          console.log(`[카카오] ${code} → ${price}원`);
-          return{price, date:'kakao'};
-        }
-      }
-    }
-  }catch(e){console.info(`[카카오실패] ${code}:`,e.message);}
-
-  // ── 3차: Yahoo Finance (.KS/.KQ) ────────────────────────────
-  const ySuffix='.KS'; // 코스닥은 .KQ지만 .KS도 대부분 동작
-  const yTicker=`${code}${ySuffix}`;
-  try{
-    const yUrl=`https://query1.finance.yahoo.com/v8/finance/chart/${yTicker}?interval=1d&range=5d`;
-    const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`;
-    const res=await fetch(proxy,{signal:AbortSignal.timeout(10000)});
-    if(res.ok){
-      const outer=await res.json();
-      const json=JSON.parse(outer.contents||'{}');
-      const meta=json?.chart?.result?.[0]?.meta;
-      const price=meta?.regularMarketPrice||meta?.previousClose||meta?.chartPreviousClose;
-      if(price&&price>100){
-        console.log(`[Yahoo] ${yTicker} → ${price}원`);
-        return{price:Math.round(price), date:'yahoo'};
-      }
-    }
-  }catch(e){console.info(`[Yahoo실패] ${yTicker}:`,e.message);}
-
-  // ── 4차: 공공데이터 전체 페이지 순회 (마지막 수단) ──────────
-  if(apiKey){
-    const baseUrl=`https://apis.data.go.kr/1160100/service/GetStockSecuritiesInfoService/getStockPriceInfo`;
-    const dates=getRecentBizDates(3);
-    for(const basDt of dates){
-      try{
-        // 총 건수 먼저 파악
-        const countUrl=`${baseUrl}?serviceKey=${apiKey}&numOfRows=1&pageNo=1&resultType=json&basDt=${basDt}`;
-        const cr=await fetch(countUrl,{signal:AbortSignal.timeout(8000)});
-        if(!cr.ok)continue;
-        const cj=await cr.json();
-        const total=Number(cj?.response?.body?.totalCount||0);
-        if(!total)continue;
-        // 페이지 순회 (최대 20페이지 × 100건)
-        const perPage=100;
-        const maxPages=Math.min(Math.ceil(total/perPage),20);
-        for(let page=1;page<=maxPages;page++){
-          const url=`${baseUrl}?serviceKey=${apiKey}&numOfRows=${perPage}&pageNo=${page}&resultType=json&basDt=${basDt}`;
-          const res=await fetch(url,{signal:AbortSignal.timeout(10000)});
-          if(!res.ok)break;
-          const json=await res.json();
-          const items=json?.response?.body?.items?.item;
-          if(!items)break;
-          const list=Array.isArray(items)?items:[items];
-          const matched=list.find(i=>i.srtnCd&&i.srtnCd.trim()===code.trim());
-          if(matched?.clpr){
-            const price=Math.round(Number(String(matched.clpr).replace(/,/g,'')));
-            if(price>100){
-              console.log(`[공공] ${code} → ${price}원 (${basDt} p${page})`);
-              return{price,date:basDt};
-            }
-          }
-        }
-      }catch(e){console.info(`[공공실패] ${code} ${basDt}:`,e.message);}
-    }
+    }catch(e){console.info(`[주식실패] ${code} ${basDt}:`,e.message);}
   }
-  throw new Error('모든 소스 조회 실패');
+  throw new Error('주식 종가 조회 실패');
 }
 async function fetchUsStockPrice(ticker){
   const t=ticker.trim().toUpperCase();
@@ -1598,7 +1541,10 @@ async function updateStockPrices(){
         const result=await fetchKrStockPrice(krCode,apiKey);
         price=result.price;
         const d=result.date;
-        source=`종가(${d.slice(0,4)}.${d.slice(4,6)}.${d.slice(6,8)})`;
+        // d가 8자리 숫자면 날짜, 아니면 소스명 그대로
+        source=d&&d.length===8
+          ?`종가(${d.slice(0,4)}.${d.slice(4,6)}.${d.slice(6,8)})`
+          :`${d||'공공데이터'}`;
       }else if(usStock){
         price=await fetchUsStockPrice(a.ticker);
         source='Yahoo';
