@@ -774,6 +774,40 @@
       </div>
     </div>
 
+    <!-- 예금/적금 전용 -->
+    <div id="a-deposit-fields" style="display:none">
+      <div class="modal-section">
+        <div class="modal-section-title">🏦 예금·적금 상세 정보</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">취득금액 (원)</label>
+            <input class="form-input" id="a-dep-cost" type="number" placeholder="0" oninput="calcDepositInterest()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">이자율 (%, 연)</label>
+            <input class="form-input" id="a-dep-rate" type="number" step="0.01" placeholder="3.50" oninput="calcDepositInterest()">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">가입일</label>
+            <input class="form-input" id="a-dep-start" type="date">
+          </div>
+          <div class="form-group">
+            <label class="form-label">만기일</label>
+            <input class="form-input" id="a-dep-end" type="date">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">연간 예상 이자수익 (자동계산)</label>
+          <input class="form-input" id="a-dep-interest" type="number" readonly style="color:var(--gold);opacity:.9" placeholder="취득금액 × 이자율">
+        </div>
+        <div style="font-size:11.5px;color:var(--text3);margin-top:6px;line-height:1.7">
+          💡 연간 이자수익은 소득관리 <strong>이자·배당 소득</strong>에 자동 연동됩니다
+        </div>
+      </div>
+    </div>
+
     <!-- 주식 전용 -->
     <div id="a-stock-fields" style="display:none">
       <div class="modal-section">
@@ -806,10 +840,6 @@
           <div class="form-group">
             <label class="form-label">연간 예상 배당 총액 (자동계산)</label>
             <input class="form-input" id="a-dividend" type="number" readonly style="color:var(--gold);opacity:.9" placeholder="주당배당 × 수량">
-            <label style="display:flex;align-items:center;gap:6px;margin-top:7px;font-size:12px;color:var(--text2);cursor:pointer">
-              <input type="checkbox" id="a-dividend-separate" style="width:15px;height:15px;accent-color:var(--gold)">
-              <span>분리과세 <span style="color:var(--gold)">(분)</span> — 소득관리 분리과세 합산</span>
-            </label>
           </div>
         </div>
         <div class="form-row">
@@ -862,6 +892,17 @@
         <div style="font-size:11.5px;color:var(--text3);margin-top:6px;line-height:1.7">
           💡 취득금액 = 액면금액 × 매입단가 / 10,000 &nbsp;|&nbsp; 평가금액 = 취득금액 (장부가 기준)
         </div>
+      </div>
+    </div>
+
+    <!-- 공통 분리과세 체크박스 (주식/리츠/채권) -->
+    <div id="a-separate-wrap" style="display:none;margin-bottom:14px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text2);cursor:pointer">
+        <input type="checkbox" id="a-dividend-separate" style="width:15px;height:15px;accent-color:var(--gold)">
+        <span>이자·배당소득을 <strong style="color:var(--gold)">분리과세</strong>로 처리 <span style="color:var(--gold)">(분)</span></span>
+      </label>
+      <div style="font-size:11px;color:var(--text3);margin-top:5px;padding-left:23px">
+        체크 시 소득관리의 <strong>분리과세 소득</strong>에 합산 (이자·배당 소득에서 제외)
       </div>
     </div>
 
@@ -1186,7 +1227,8 @@ const totalAssets  =()  =>data.assets.reduce((s,a)=>s+Number(a.value),0);
 const totalDebts   =()  =>(data.debts||[]).reduce((s,d)=>s+Number(d.amount),0);
 const totalIncome  =types=>data.incomes.filter(i=>types.includes(i.type)).reduce((s,i)=>s+Number(i.amount),0);
 const isFinancial  =t  =>['deposit','stock','reit','bond','fund','insurance','pension','crypto','cash'].includes(t);
-const annualReturn =a  =>(a.type==='stock'||a.type==='reit')?Number(a.annualDividend||0):a.type==='bond'?Number(a.annualInterest||0):0;
+const annualReturn =a  =>(a.type==='stock'||a.type==='reit')?Number(a.annualDividend||0):
+  (a.type==='bond'||a.type==='deposit')?Number(a.annualInterest||0):0;
 
 // 자산에서 발생하는 이자·배당 소득 (분리과세 제외)
 const assetDividendIncome=()=>data.assets.filter(a=>!a.dividendSeparate).reduce((s,a)=>s+annualReturn(a),0);
@@ -1855,12 +1897,12 @@ function renderIncome(){
 
   // 자산 배당 항목 목록 생성 (소득 섹션에 표시용)
   const assetDividendItems=data.assets.filter(a=>annualReturn(a)>0&&!a.dividendSeparate).map(a=>({
-    name:a.name, amount:annualReturn(a), type:'dividend', fromAsset:true,
-    memberId:a.memberId, id:a.id, separate:false
+    name:a.name, amount:annualReturn(a), type:a.type==='bond'?'interest':'dividend', fromAsset:true,
+    memberId:a.memberId, id:a.id, separate:false, assetType:a.type
   }));
   const assetSeparateItems=data.assets.filter(a=>annualReturn(a)>0&&a.dividendSeparate).map(a=>({
     name:a.name, amount:annualReturn(a), type:'separate', fromAsset:true,
-    memberId:a.memberId, id:a.id, separate:true
+    memberId:a.memberId, id:a.id, separate:true, assetType:a.type
   }));
 
   document.getElementById('income-sections').innerHTML=[
@@ -1887,9 +1929,12 @@ function renderIncome(){
     }),...g.extraItems.map(i=>{
       const m=data.members.find(m=>m.id===i.memberId);
       const sepBadge=i.separate?` <span style="color:var(--gold);font-size:10px">(분)</span>`:'';
+      const isoBond=i.assetType==='bond'||i.assetType==='deposit';
+      const tagClass=isoBond?'tag-green':i.separate?'tag-gold':'tag-blue';
+      const tagLabel=isoBond?'이자소득':i.separate?'배당(분)':'배당소득';
       return`<tr style="opacity:.85">
         <td>${i.name}${sepBadge} <span style="font-size:10px;color:var(--text3)">[자산]</span></td>
-        <td><span class="tag tag-gold">배당</span></td>
+        <td><span class="tag ${tagClass}">${tagLabel}</span></td>
         <td>${m?m.icon+' '+m.name:'-'}</td>
         <td class="mono">${won(i.amount)}</td>
         <td style="color:var(--text3);font-size:12px">자산에서 자동 연동</td>
@@ -2104,12 +2149,21 @@ function deleteSnapshot(date){
 function onAssetTypeChange(){
   const t=document.getElementById('a-type').value;
   const isStockLike=t==='stock'||t==='reit';
-  document.getElementById('a-basic-fields').style.display=(isStockLike||t==='bond')?'none':'block';
+  const isDeposit=t==='deposit';
+  const showSeparate=isStockLike||t==='bond';
+  document.getElementById('a-basic-fields').style.display=(isStockLike||t==='bond'||isDeposit)?'none':'block';
   document.getElementById('a-stock-fields').style.display=isStockLike?'block':'none';
   document.getElementById('a-bond-fields').style.display=t==='bond'?'block':'none';
-  // 주식/리츠 구분 레이블 변경
+  document.getElementById('a-deposit-fields').style.display=isDeposit?'block':'none';
+  document.getElementById('a-separate-wrap').style.display=showSeparate?'block':'none';
   const stockTitle=document.getElementById('a-stock-section-title');
   if(stockTitle)stockTitle.textContent=t==='reit'?'🏢 리츠 상세 정보':'📈 주식 상세 정보';
+}
+
+function calcDepositInterest(){
+  const cost=Number(document.getElementById('a-dep-cost').value)||0;
+  const rate=Number(document.getElementById('a-dep-rate').value)||0;
+  if(cost&&rate)document.getElementById('a-dep-interest').value=Math.round(cost*(rate/100));
 }
 
 function calcStockValue(){
@@ -2179,7 +2233,8 @@ function openAssetModal(id){
   ['a-name','a-value','a-cost','a-note','a-ticker','a-qty','a-buy-price','a-cur-price',
    'a-dividend-per-share','a-dividend','a-stock-val-display',
    'a-maturity','a-face-value','a-coupon-rate',
-   'a-bond-buy','a-bond-buy-date','a-bond-equiv-rate','a-bond-interest'
+   'a-bond-buy','a-bond-buy-date','a-bond-equiv-rate','a-bond-interest',
+   'a-dep-cost','a-dep-rate','a-dep-start','a-dep-end','a-dep-interest'
   ].forEach(fid=>{const el=document.getElementById(fid);if(el)el.value='';});
   const sepCb=document.getElementById('a-dividend-separate');
   if(sepCb)sepCb.checked=false;
@@ -2203,6 +2258,9 @@ function openAssetModal(id){
       document.getElementById('a-dividend').value=a.annualDividend||'';
       document.getElementById('a-stock-val-display').value=a.value||'';
       if(sepCb)sepCb.checked=!!a.dividendSeparate;
+      // 분리과세 wrap 표시 (stock/reit/bond)
+      const sepWrap=document.getElementById('a-separate-wrap');
+      if(sepWrap)sepWrap.style.display=['stock','reit','bond'].includes(a.type)?'block':'none';
     }else if(a.type==='bond'){
       document.getElementById('a-maturity').value=a.maturity||'';
       document.getElementById('a-face-value').value=a.faceValue||'';
@@ -2211,7 +2269,16 @@ function openAssetModal(id){
       document.getElementById('a-bond-buy-date').value=a.buyDate||'';
       document.getElementById('a-bond-equiv-rate').value=a.equivRate||'';
       document.getElementById('a-bond-interest').value=a.annualInterest||'';
+      if(sepCb)sepCb.checked=!!a.dividendSeparate;
+      const sepWrap=document.getElementById('a-separate-wrap');
+      if(sepWrap)sepWrap.style.display='block';
       calcBondFields();
+    }else if(a.type==='deposit'){
+      document.getElementById('a-dep-cost').value=a.cost||'';
+      document.getElementById('a-dep-rate').value=a.depositRate||'';
+      document.getElementById('a-dep-start').value=a.depositStart||'';
+      document.getElementById('a-dep-end').value=a.depositEnd||'';
+      document.getElementById('a-dep-interest').value=a.annualInterest||'';
     }else{
       document.getElementById('a-value').value=a.value||'';
       document.getElementById('a-cost').value=a.cost||'';
@@ -2240,7 +2307,6 @@ function saveAsset(){
     obj={...obj,ticker:document.getElementById('a-ticker').value.trim(),
       qty,buyPrice,curPrice,
       dividendPerShare:dps,
-      dividendSeparate:!!(document.getElementById('a-dividend-separate')?.checked),
       annualDividend:dps&&qty?dps*qty:(Number(document.getElementById('a-dividend').value)||0),
       value:curPrice*qty||Number(document.getElementById('a-stock-val-display').value)||0,
       cost:buyPrice*qty};
@@ -2249,21 +2315,37 @@ function saveAsset(){
     const couponRate=Number(document.getElementById('a-coupon-rate').value)||0;
     const bondBuy=Number(document.getElementById('a-bond-buy').value)||0;
     const annualInterest=Number(document.getElementById('a-bond-interest').value)||Math.round(faceValue*(couponRate/100));
-    // 취득금액 = 액면금액 × 매입단가 / 10,000
     const acquisitionCost=faceValue&&bondBuy?Math.round(faceValue*bondBuy/10000):bondBuy;
     obj={...obj,
       maturity:document.getElementById('a-maturity').value,
       buyDate:document.getElementById('a-bond-buy-date').value,
       equivRate:Number(document.getElementById('a-bond-equiv-rate').value)||0,
       faceValue,couponRate,
-      bondBuy,          // 매입단가 (원)
-      acquisitionCost,  // 취득금액 = 액면금액 × 단가 / 10,000
+      bondBuy,
+      acquisitionCost,
       annualInterest,
-      value:acquisitionCost,  // 평가금액 = 취득금액
+      value:acquisitionCost,
       cost:acquisitionCost};
+  }else if(type==='deposit'){
+    const depCost=Number(document.getElementById('a-dep-cost').value)||0;
+    const depRate=Number(document.getElementById('a-dep-rate').value)||0;
+    const annualInterest=Number(document.getElementById('a-dep-interest').value)||Math.round(depCost*(depRate/100));
+    obj={...obj,
+      depositRate:depRate,
+      depositStart:document.getElementById('a-dep-start').value,
+      depositEnd:document.getElementById('a-dep-end').value,
+      annualInterest,
+      value:depCost,
+      cost:depCost};
   }else{
     obj.value=Number(document.getElementById('a-value').value)||0;
     obj.cost =Number(document.getElementById('a-cost').value)||0;
+  }
+
+  // 분리과세 체크박스 공통 처리 (주식/리츠/채권)
+  const sepCbEl=document.getElementById('a-dividend-separate');
+  if(sepCbEl&&['stock','reit','bond'].includes(type)){
+    obj.dividendSeparate=sepCbEl.checked;
   }
 
   if(id){const idx=data.assets.findIndex(a=>a.id===id);data.assets[idx]={...data.assets[idx],...obj};}
