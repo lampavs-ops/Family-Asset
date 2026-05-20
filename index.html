@@ -1344,7 +1344,7 @@ function renderMemberAssets(){
     const gain=Number(a.value)-Number(a.cost||0);
     const detail=(a.type==='stock'||a.type==='reit')&&a.ticker
       ?`<div style="font-size:11px;color:var(--text3)">${a.ticker} | ${a.qty}주</div>`
-      :a.bondCode?`<div style="font-size:11px;color:var(--text3)">${a.bondCode}</div>`:'';
+      :a.type==='bond'?`<div style="font-size:11px;color:var(--text3)">만기 ${a.maturity||'-'} | ${a.couponRate||0}%</div>`:'';
     return`<tr>
       <td><div style="font-weight:600">${a.name}</div>${detail}</td>
       <td>${m?m.icon+' '+m.name:'-'}</td>
@@ -1414,7 +1414,7 @@ function renderAssets(){
       }
       let detail='';
       if((a.type==='stock'||a.type==='reit')&&a.ticker)detail=`${a.ticker} | ${a.qty}주 @ ${won(a.curPrice)}`;
-      if(a.type==='bond'&&a.bondCode)detail=`만기 ${a.maturity||'-'} | 표면이율 ${a.couponRate||0}%`;
+      if(a.type==='bond')detail=`만기 ${a.maturity||'-'} | 표면이율 ${a.couponRate||0}%`;
       return`<tr>
         <td><div style="font-weight:600">${a.name}</div>${detail?`<div style="font-size:11px;color:var(--text3)">${detail}</div>`:''}</td>
         <td>${m?m.icon+' '+m.name:'-'}</td>
