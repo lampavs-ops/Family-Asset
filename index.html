@@ -860,7 +860,7 @@
           <input class="form-input" id="a-bond-interest" type="number" readonly style="color:var(--gold);opacity:.9" placeholder="액면금액 × 표면이자율">
         </div>
         <div style="font-size:11.5px;color:var(--text3);margin-top:6px;line-height:1.7">
-          💡 평가금액 = 매입가격 (장부가 기준)
+          💡 취득금액 = 액면금액 × 매입단가 / 10,000 &nbsp;|&nbsp; 평가금액 = 취득금액 (장부가 기준)
         </div>
       </div>
     </div>
@@ -1034,7 +1034,24 @@ const pct  = (v,t) => t>0?Math.round(v/t*100):0;
 // ═══════════════════════════════════════════
 function load(){
   const s=localStorage.getItem('fam_asset_v4');
-  if(s){try{data=JSON.parse(s);if(!data.debts)data.debts=[];}catch(e){}}
+  if(s){try{
+    data=JSON.parse(s);
+    if(!data.debts)data.debts=[];
+    // 기존 채권 데이터 마이그레이션: acquisitionCost 없으면 자동 계산
+    data.assets.forEach(a=>{
+      if(a.type==='bond'&&!a.acquisitionCost){
+        if(a.faceValue&&a.bondBuy&&a.bondBuy<10000){
+          // bondBuy가 단가(10000 미만)인 경우
+          a.acquisitionCost=Math.round(a.faceValue*a.bondBuy/10000);
+        }else{
+          // bondBuy가 이미 총금액인 경우 그대로 사용
+          a.acquisitionCost=a.bondBuy||a.cost||a.value;
+        }
+        a.value=a.acquisitionCost;
+        a.cost=a.acquisitionCost;
+      }
+    });
+  }catch(e){}}
   else{loadSample();save();}
 }
 function save(){localStorage.setItem('fam_asset_v4',JSON.stringify(data));}
@@ -1415,7 +1432,7 @@ function renderPricePage(){
           <td class="mono">${a.maturity||'-'}</td>
           <td class="mono">${won(a.faceValue)}</td>
           <td class="mono">${a.couponRate||0}%</td>
-          <td class="mono" id="bp-${a.id}">${won(a.bondBuy||a.value)}</td>
+          <td class="mono" id="bp-${a.id}">${won(a.acquisitionCost||a.bondBuy||a.value)}</td>
           <td class="mono" style="color:var(--text3)">${a.buyDate||'-'}</td>
           <td class="mono" style="color:var(--blue)">${a.equivRate?a.equivRate+'%':'-'}</td>
           <td class="mono" style="color:var(--gold)">${won(a.annualInterest)}</td>
@@ -1596,8 +1613,8 @@ function updateBondAccrued(){
   bonds.forEach(a=>{
     if(!a.annualInterest)return;
     a.accruedInterest=calcAccruedInterest(a.annualInterest);
-    // 장부가는 매입가격 그대로 유지
-    a.value=a.bondBuy||a.cost||a.value;
+    // 평가금액 = 취득금액 (없으면 bondBuy 또는 기존 value)
+    a.value=a.acquisitionCost||a.bondBuy||a.cost||a.value;
     updated++;
     const bp=document.getElementById('bp-'+a.id);
     if(bp)bp.textContent=won(a.value);
@@ -1641,7 +1658,9 @@ function parseBondBulkText(text){
     const equivRate=cols[6]?parseFloat(cols[6].replace(/%/g,''))||0:0;
     if(!name||!faceValue||!bondBuy||!couponRate||!maturity)return null;
     const annualInterest=Math.round(faceValue*(couponRate/100));
-    return{name,faceValue,bondBuy,couponRate,maturity,buyDate,equivRate,annualInterest};
+    // 취득금액 = 액면금액 × 매입단가 / 10,000
+    const acquisitionCost=faceValue&&bondBuy?Math.round(faceValue*bondBuy/10000):bondBuy;
+    return{name,faceValue,bondBuy,acquisitionCost,couponRate,maturity,buyDate,equivRate,annualInterest};
   }).filter(Boolean);
 }
 
@@ -1668,14 +1687,15 @@ function saveBondBulk(){
       id:uid(),type:'bond',memberId,
       name:i.name,
       faceValue:i.faceValue,
-      bondBuy:i.bondBuy,
+      bondBuy:i.bondBuy,           // 매입단가
+      acquisitionCost:i.acquisitionCost, // 취득금액
       couponRate:i.couponRate,
       maturity:i.maturity,
       buyDate:i.buyDate||'',
       equivRate:i.equivRate||0,
       annualInterest:i.annualInterest,
-      value:i.bondBuy,
-      cost:i.bondBuy,
+      value:i.acquisitionCost,   // 평가금액 = 취득금액
+      cost:i.acquisitionCost,    // 취득금액
       note:''
     });
   });
@@ -2229,14 +2249,18 @@ function saveAsset(){
     const couponRate=Number(document.getElementById('a-coupon-rate').value)||0;
     const bondBuy=Number(document.getElementById('a-bond-buy').value)||0;
     const annualInterest=Number(document.getElementById('a-bond-interest').value)||Math.round(faceValue*(couponRate/100));
+    // 취득금액 = 액면금액 × 매입단가 / 10,000
+    const acquisitionCost=faceValue&&bondBuy?Math.round(faceValue*bondBuy/10000):bondBuy;
     obj={...obj,
       maturity:document.getElementById('a-maturity').value,
       buyDate:document.getElementById('a-bond-buy-date').value,
       equivRate:Number(document.getElementById('a-bond-equiv-rate').value)||0,
-      faceValue,couponRate,bondBuy,
+      faceValue,couponRate,
+      bondBuy,          // 매입단가 (원)
+      acquisitionCost,  // 취득금액 = 액면금액 × 단가 / 10,000
       annualInterest,
-      value:bondBuy,
-      cost:bondBuy};
+      value:acquisitionCost,  // 평가금액 = 취득금액
+      cost:acquisitionCost};
   }else{
     obj.value=Number(document.getElementById('a-value').value)||0;
     obj.cost =Number(document.getElementById('a-cost').value)||0;
